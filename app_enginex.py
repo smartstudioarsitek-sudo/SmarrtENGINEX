@@ -25,7 +25,6 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- 1. SETUP API KEY (WAJIB) ---
-# Cek Secrets atau Input Manual
 api_key = st.secrets.get("GOOGLE_API_KEY")
 if not api_key:
     with st.sidebar:
@@ -40,9 +39,9 @@ genai.configure(api_key=api_key)
 gems_persona = {
     "👔 Project Manager (Verifikator)": """
         Kamu adalah Senior Engineering Manager. TUGAS UTAMA:
-        1. Menganalisis permintaan user (misal: "Saya mau bangun hotel").
-        2. Menentukan Gem mana yang harus dipanggil (misal: "Panggil Arsitek untuk denah, lalu Struktur untuk pondasi").
-        3. VERIFIKASI: Mengecek hasil kerja Gem lain. Jika ada kode terpotong atau hitungan salah, kamu harus minta revisi.
+        1. Menganalisis permintaan user.
+        2. Menentukan Gem mana yang harus dipanggil (Arsitek/Sipil/Estimator).
+        3. VERIFIKASI: Mengecek hasil kerja Gem lain.
     """,
     "🏛️ Ahli Arsitektur (Design)": "Kamu Senior Architect. Fokus: Konsep, Denah, Tampak, Material, Estetika Tropis.",
     "🏗️ Ahli Struktur (Sipil)": "Kamu Ahli Struktur SNI. Fokus: Beton, Baja, Pondasi, Etabs/SAP2000.",
@@ -61,8 +60,6 @@ with st.sidebar:
     st.caption("Integrated Engineering AI")
     st.divider()
     
-    # Pilih Proyek (Session)
-    st.subheader("📁 Pilih Proyek")
     existing_projects = db.daftar_proyek()
     mode_proyek = st.radio("Mode:", ["Proyek Baru", "Buka Proyek Lama"])
     
@@ -77,8 +74,6 @@ with st.sidebar:
             
     st.divider()
     
-    # Pilih Tim Ahli
-    st.subheader("👥 Panggil Tim Ahli")
     selected_gem = st.selectbox("Siapa yang mau ditanya?", list(gems_persona.keys()))
     
     if st.button("🗑️ Hapus Chat Proyek Ini"):
@@ -92,7 +87,7 @@ with st.sidebar:
 st.markdown(f'<div class="main-header">{nama_proyek}</div>', unsafe_allow_html=True)
 st.caption(f"Sedang berdiskusi dengan: **{selected_gem}**")
 
-# A. Tampilkan History Chat dari Database
+# A. Tampilkan History
 history = db.get_chat_history(nama_proyek, selected_gem)
 for chat in history:
     with st.chat_message(chat['role']):
@@ -100,38 +95,36 @@ for chat in history:
 
 # B. Input User
 if prompt := st.chat_input("Tulis instruksi Anda di sini..."):
-    # 1. Simpan & Tampilkan Pesan User
     db.simpan_chat(nama_proyek, selected_gem, "user", prompt)
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # 2. Proses AI
     with st.chat_message("assistant"):
         with st.spinner(f"{selected_gem} sedang berpikir..."):
             try:
-                # Gabungkan Persona + Konteks
-                full_instruction = gems_persona[selected_gem]
+                # --- PERBAIKAN DI SINI (JURUS STABIL) ---
+                # 1. Kita pakai 'gemini-pro' (pasti ada)
+                # 2. Hapus parameter 'system_instruction' di dalam kurung GenerativeModel
+                model = genai.GenerativeModel('gemini-pro')
                 
-                # Khusus Project Manager: Beri tahu dia tentang tim yang tersedia
+                # 3. Tempelkan instruksi manual di depan pertanyaan user
+                instruksi = gems_persona[selected_gem]
                 if "Project Manager" in selected_gem:
-                    full_instruction += f"\n\nTim yang tersedia: {', '.join(gems_persona.keys())}"
-
-                model = genai.GenerativeModel('gemini-1.5-flash', system_instruction=full_instruction)
+                    instruksi += f"\n\nTim tersedia: {', '.join(gems_persona.keys())}"
                 
-                # Kirim chat history sebelumnya sebagai konteks (agar nyambung)
+                pesan_final = f"PERAN KAMU: {instruksi}\n\nPERTANYAAN USER: {prompt}"
+
+                # 4. Mulai Chat dengan History
                 chat_session = model.start_chat(history=[
                     {"role": "user" if h['role']=="user" else "model", "parts": [h['content']]} 
                     for h in history
                 ])
                 
-                response = chat_session.send_message(prompt)
+                response = chat_session.send_message(pesan_final)
                 reply = response.text
                 
                 st.markdown(reply)
-                
-                # 3. Simpan Jawaban AI
                 db.simpan_chat(nama_proyek, selected_gem, "assistant", reply)
                 
             except Exception as e:
                 st.error(f"Error AI: {e}")
-
