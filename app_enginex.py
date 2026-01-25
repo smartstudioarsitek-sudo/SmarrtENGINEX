@@ -23,90 +23,80 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- 1. SETUP API KEY ---
-api_key = st.secrets.get("GOOGLE_API_KEY")
-if not api_key:
-    with st.sidebar:
-        api_key = st.text_input("🔑 Masukkan Gemini API Key:", type="password")
-        if not api_key:
-            st.warning("Masukkan API Key dulu.")
-            st.stop()
+# --- 1. SETUP API KEY (VERSI EMERGENCY INPUT) ---
+# Logika: Prioritaskan Input Sidebar agar User bisa ganti key kapan saja
+with st.sidebar:
+    st.title("🏗️ ENGINEX")
+    
+    # Input Key Selalu Muncul
+    api_key_input = st.text_input("🔑 Ganti API Key Baru (Jika Error):", type="password")
+    
+    # Cek: Pakai Input User atau Secrets?
+    if api_key_input:
+        api_key = api_key_input
+        st.caption("ℹ️ Menggunakan Key Manual")
+    else:
+        api_key = st.secrets.get("GOOGLE_API_KEY")
+        if api_key:
+            st.caption("ℹ️ Menggunakan Key dari Secrets")
+
+    if not api_key:
+        st.warning("⚠️ Masukkan API Key dulu untuk memulai.")
+        st.stop()
 
 genai.configure(api_key=api_key)
 
 # --- 2. AUTO-DETECT MODEL (VERSI FILTER KUOTA BESAR) ---
 @st.cache_resource
-def get_working_model():
+def get_working_model(api_key_trigger): # Tambah trigger biar refresh kalau key ganti
     try:
-        # 1. Minta daftar semua model yang tersedia di akun ini
         all_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
         
-        # 2. CARI YANG KUOTANYA BESAR (Flash 1.5)
-        # Kita cari yang ada kata 'flash' TAPI JANGAN yang '2.0' atau '2.5' atau 'exp' (experimental)
-        safe_flash = None
+        # PRIORITAS 1: Flash 1.5 (Kuota 1500/hari)
         for m in all_models:
-            if "flash" in m and "1.5" in m:
-                safe_flash = m
-                break # Ketemu! Langsung ambil.
-        
-        if safe_flash:
-            return safe_flash, None
+            if "flash" in m and "1.5" in m: return m, None
             
-        # 3. Kalau 1.5 gak ada, cari Gemini Pro (Versi 1.0 Stabil)
+        # PRIORITAS 2: Pro (Cadangan)
         for m in all_models:
-            if "gemini-pro" in m and "vision" not in m:
-                return m, None
+            if "gemini-pro" in m and "vision" not in m: return m, None
                 
-        # 4. Kalau kepepet, ambil flash apa saja (meski 2.5)
-        for m in all_models:
-            if "flash" in m: return m, None
+        # DARURAT
+        if all_models: return all_models[0], None
             
-        return None, "Tidak ditemukan model yang cocok. Coba ganti API Key."
-        
+        return None, "Tidak ada model aktif."
     except Exception as e: return None, str(e)
 
-model_name_fix, error_msg = get_working_model()
+# Panggil fungsi (dipicu ulang jika api_key berubah)
+model_name_fix, error_msg = get_working_model(api_key)
+
 if error_msg: 
-    # Fallback terakhir banget kalau API error
-    model_name_fix = "gemini-pro"
+    st.error(f"❌ Masalah API Key: {error_msg}")
+    model_name_fix = "gemini-1.5-flash" # Default maksa
 
 # --- 3. DEFINISI OTAK GEMS (FINAL: SESUAI SCREENSHOT) ---
 gems_persona = {
-    # === A. MANAJEMEN & LEAD ===
     "👔 Project Manager (PM)": "Kamu Senior Engineering Manager. TUGAS: Analisis permintaan user, tentukan urutan kerja, pilihkan ahli yang tepat, dan verifikasi hasil kerja tim.",
     "📝 Drafter Laporan DED (Spesialis PUPR)": "Kamu asisten pembuat laporan yang pintar. Fokus: Menyusun Laporan Pendahuluan, Antara, Akhir (Word), Spek Teknis, dan Notulensi Rapat.",
     "⚖️ Ahli Legal & Kontrak": "Kamu Contract Specialist. Fokus: Hukum Konstruksi, Kontrak (FIDIC/Lumpsum), Klaim, dan Sengketa.",
-
-    # === B. SUMBER DAYA AIR (SDA) & PANTAI ===
     "🌾 Ahli IKSI-PAI (Permen PUPR)": "Kamu Konsultan Teknis Irigasi Senior. Hafal bobot, kriteria, dan cara menilai kondisi fisik vs fungsi (IKSI). Fokus: Blangko 01-O s/d 09-O dan PAI.",
     "🌊 Ahli Bangunan Air & Irigasi (The Designer)": "Mencakup: Desain Irigasi, Bendung (Weir), Bendungan (Dam), Hidraulika. Fokus: Desain fisik, stabilitas struktur air.",
     "🌧️ Ahli Hidrologi & Sungai (The Analyst)": "Mencakup: Hidrologi, Curah hujan, Klimatologi, Pola tanam, FJ Mock, Desain Banjir, Teknik Sungai. Fokus: Analisis data air.",
     "🏖️ Ahli Teknik Pantai (The Coastal Expert)": "Mencakup: Ahli Pantai, Pelabuhan, Pasang Surut. Fokus: Dinamika laut, Breakwater, Seawall, dan proteksi garis pantai.",
-
-    # === C. SIPIL & INFRASTRUKTUR ===
     "🏗️ Ahli Struktur (Structural Expert)": "Fokus: Kekuatan Bangunan, Standar SNI, Hitungan Beton/Baja. Gunakan untuk: Menentukan dimensi kolom/balok/plat.",
     "🪨 Ahli Geoteknik & Mekanika Tanah": "Fokus: Penyelidikan Tanah (Sondir/Boring), Daya Dukung, Stabilitas Lereng, Perbaikan Tanah.",
     "🛣️ Ahli Jalan & Jembatan": "Fokus: Geometrik Jalan, Perkerasan (Pavement), Struktur Jembatan. Basis: Standar Bina Marga (PUPR) & AASHTO.",
     "🌍 Ahli Geodesi & GIS": "Fokus: Survey Topografi, Pengukuran (Total Station/GPS), Fotogrametri (Drone), Perhitungan Galian/Timbunan (Cut & Fill).",
-
-    # === D. ARSITEKTUR & VISUAL ===
     "🏛️ Senior Architect & Interior": "Fokus: Bangunan, Estetika, Fungsi Ruang, Material, Utilitas Bangunan, Interior Layout.",
     "🌳 Landscape Architect (Lansekap)": "Fokus: Ruang Luar, Tanaman, Hardscape, Resapan Air. Gunakan untuk: Desain taman, area hijau.",
     "🎨 Creative Director ArchViz (3D & Animation)": "Fokus: Konsep Visual, Storytelling, Cinematography, Prompt Engineering (AI Image), dan Arahan Teknis Rendering (Lumion/Enscape/D5).",
     "🌍 Ahli Planologi (Urban Planner)": "Fokus: Makro Wilayah, Peraturan (RTRW/RDTR), Perizinan, Analisis Tapak Kawasan.",
-
-    # === E. LINGKUNGAN & PROSES ===
     "🏭 Ahli Proses Industri (Chemical Engineer)": "Fokus: Pengolahan Minyak Mentah/Olie Bekas, Pipa Industri, Proses Kimia. (Ranah Teknik Kimia).",
     "📜 Ahli AMDAL & Dokumen Lingkungan": "Fokus: AMDAL, UKL-UPL. Bukan soal hitungan teknik, tapi soal Hukum Lingkungan, Dampak Sosial, dan Biologi.",
     "♻️ Ahli Teknik Lingkungan (Sanitary)": "Fokus: Ilmu IPAL (Air Limbah), IPLT (Lumpur Tinja), TPA (Sampah), dan Air Bersih (WTP).",
     "⛑️ Ahli K3 Konstruksi": "Fokus: Rencana K3 (SMKK), Identifikasi Bahaya, APD, Prosedur Kerja Aman.",
-
-    # === F. DIGITAL & SOFTWARE ===
     "💻 Lead Engineering Developer": "Kamu Programmer Teknik. Tidak perlu hafal pasal, tapi jago menerjemahkan tabel penilaian menjadi Kode Python/Streamlit/Database.",
     "📐 CAD & BIM Automator": "Fokus: Penulis script AutoLISP (AutoCAD) dan Dynamo (Revit) untuk otomatisasi gambar.",
     "🖥️ Instruktur Software": "Kamu Guru Software Teknik. WAJIB: Jelaskan Step-by-step & Berikan Link Youtube Search di akhir.",
-
-    # === G. BIAYA & KEUANGAN ===
     "💰 Ahli Estimator & RAB": "Fokus: Volume Material, BOQ, Harga Satuan (AHSP), Budgeting. Gunakan untuk: Menghitung biaya proyek.",
     "💵 Ahli Keuangan Proyek": "Fokus: Cashflow, Pajak Proyek, Laporan Keuangan, ROI.",
     "📜 Ahli Perizinan (IMB/PBG)": "Fokus: Pengurusan Izin Bangunan Gedung (PBG), SLF, KRK."
@@ -114,8 +104,6 @@ gems_persona = {
 
 # --- 4. UI SIDEBAR ---
 with st.sidebar:
-    st.title("🏗️ ENGINEX")
-    # Tampilkan model yang TERPILIH (Auto-Detect)
     st.caption(f"Status AI: ✅ Terhubung\nModel: `{model_name_fix}`") 
     st.divider()
     
@@ -167,9 +155,8 @@ if prompt := st.chat_input("Ketik pesan..."):
     with st.chat_message("assistant"):
         with st.spinner(f"{selected_gem} berpikir..."):
             try:
-                # INSTANSIASI MODEL DARI HASIL DETEKSI (model_name_fix)
+                # INSTANSIASI MODEL
                 model = genai.GenerativeModel(model_name_fix)
-                
                 full_prompt = f"PERAN: {gems_persona[selected_gem]}\nUSER: {prompt}"
                 
                 chat_history_formatted = [{"role": "user" if h['role']=="user" else "model", "parts": [h['content']]} for h in history]
@@ -183,6 +170,6 @@ if prompt := st.chat_input("Ketik pesan..."):
             except Exception as e:
                 err_msg = str(e)
                 if "429" in err_msg:
-                    st.error("⚠️ Kuota Habis. Silakan GANTI API KEY di Sidebar.")
+                    st.error("⚠️ SISA KUOTA API KEY 0 RUPIAH. Mohon buat KEY BARU di aistudio.google.com dan masukkan di Sidebar kiri.")
                 else:
                     st.error(f"Error Generasi: {e}")
