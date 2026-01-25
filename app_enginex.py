@@ -23,57 +23,39 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- 1. SETUP API KEY (VERSI EMERGENCY INPUT) ---
-# Logika: Prioritaskan Input Sidebar agar User bisa ganti key kapan saja
+# --- 1. SETUP API KEY (DENGAN PEMBERSIH & INPUT MANUAL) ---
 with st.sidebar:
     st.title("🏗️ ENGINEX")
     
-    # Input Key Selalu Muncul
-    api_key_input = st.text_input("🔑 Ganti API Key Baru (Jika Error):", type="password")
+    # Prioritaskan Input Manual agar Kakak bisa ganti key kapan saja
+    api_key_input = st.text_input("🔑 API Key Baru (Wajib Diisi):", type="password")
     
-    # Cek: Pakai Input User atau Secrets?
     if api_key_input:
-        api_key = api_key_input
-        st.caption("ℹ️ Menggunakan Key Manual")
+        raw_key = api_key_input
+        st.caption("ℹ️ Memakai Key Manual")
     else:
-        api_key = st.secrets.get("GOOGLE_API_KEY")
-        if api_key:
-            st.caption("ℹ️ Menggunakan Key dari Secrets")
-
-    if not api_key:
-        st.warning("⚠️ Masukkan API Key dulu untuk memulai.")
+        # Cadangan ambil dari secrets kalau input kosong
+        raw_key = st.secrets.get("GOOGLE_API_KEY")
+        
+    if not raw_key:
+        st.warning("⚠️ Masukkan API Key dulu.")
         st.stop()
 
-genai.configure(api_key=api_key)
+    # BERSIHKAN KEY (Hapus spasi/enter tersembunyi)
+    clean_api_key = raw_key.strip()
 
-# --- 2. AUTO-DETECT MODEL (VERSI FILTER KUOTA BESAR) ---
-@st.cache_resource
-def get_working_model(api_key_trigger): # Tambah trigger biar refresh kalau key ganti
-    try:
-        all_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-        
-        # PRIORITAS 1: Flash 1.5 (Kuota 1500/hari)
-        for m in all_models:
-            if "flash" in m and "1.5" in m: return m, None
-            
-        # PRIORITAS 2: Pro (Cadangan)
-        for m in all_models:
-            if "gemini-pro" in m and "vision" not in m: return m, None
-                
-        # DARURAT
-        if all_models: return all_models[0], None
-            
-        return None, "Tidak ada model aktif."
-    except Exception as e: return None, str(e)
+# KONFIGURASI JALUR REST (Supaya tidak timeout/illegal metadata)
+try:
+    genai.configure(api_key=clean_api_key, transport="rest")
+except Exception as e:
+    st.error(f"Gagal Konfigurasi: {e}")
 
-# Panggil fungsi (dipicu ulang jika api_key berubah)
-model_name_fix, error_msg = get_working_model(api_key)
+# --- 2. MODEL SELECTION (HARDCODED - JANGAN AUTO DETECT LAGI) ---
+# Kita paksa pakai 1.5 Flash (Kuota 1500/hari)
+# Jangan biarkan AI memilih 2.5 Flash (Kuota cuma 20/hari)
+TARGET_MODEL = "gemini-1.5-flash"
 
-if error_msg: 
-    st.error(f"❌ Masalah API Key: {error_msg}")
-    model_name_fix = "gemini-1.5-flash" # Default maksa
-
-# --- 3. DEFINISI OTAK GEMS (FINAL: SESUAI SCREENSHOT) ---
+# --- 3. DEFINISI OTAK GEMS (FULL TEAM SESUAI GAMBAR) ---
 gems_persona = {
     "👔 Project Manager (PM)": "Kamu Senior Engineering Manager. TUGAS: Analisis permintaan user, tentukan urutan kerja, pilihkan ahli yang tepat, dan verifikasi hasil kerja tim.",
     "📝 Drafter Laporan DED (Spesialis PUPR)": "Kamu asisten pembuat laporan yang pintar. Fokus: Menyusun Laporan Pendahuluan, Antara, Akhir (Word), Spek Teknis, dan Notulensi Rapat.",
@@ -104,7 +86,8 @@ gems_persona = {
 
 # --- 4. UI SIDEBAR ---
 with st.sidebar:
-    st.caption(f"Status AI: ✅ Terhubung\nModel: `{model_name_fix}`") 
+    # Tampilkan Model yang Dipaksa
+    st.caption(f"Status: ✅ Terhubung\nModel: `{TARGET_MODEL}` (Kuota Besar)") 
     st.divider()
     
     # === SAVE & RESTORE ===
@@ -155,8 +138,9 @@ if prompt := st.chat_input("Ketik pesan..."):
     with st.chat_message("assistant"):
         with st.spinner(f"{selected_gem} berpikir..."):
             try:
-                # INSTANSIASI MODEL
-                model = genai.GenerativeModel(model_name_fix)
+                # PAKSA PAKE 1.5 FLASH
+                model = genai.GenerativeModel(TARGET_MODEL)
+                
                 full_prompt = f"PERAN: {gems_persona[selected_gem]}\nUSER: {prompt}"
                 
                 chat_history_formatted = [{"role": "user" if h['role']=="user" else "model", "parts": [h['content']]} for h in history]
@@ -170,6 +154,17 @@ if prompt := st.chat_input("Ketik pesan..."):
             except Exception as e:
                 err_msg = str(e)
                 if "429" in err_msg:
-                    st.error("⚠️ SISA KUOTA API KEY 0 RUPIAH. Mohon buat KEY BARU di aistudio.google.com dan masukkan di Sidebar kiri.")
+                    # Kalau masih limit juga, berarti API Key-nya beneran habis total
+                    st.error("⚠️ Kuota API Key Habis Total. Mohon input API KEY BARU lagi di Sidebar.")
+                elif "404" in err_msg:
+                    # Fallback kalau 1.5 Flash lagi down, pakai Pro
+                    try:
+                        fallback_model = genai.GenerativeModel("gemini-pro")
+                        chat = fallback_model.start_chat(history=chat_history_formatted)
+                        response = chat.send_message(full_prompt)
+                        st.markdown(response.text)
+                        db.simpan_chat(nama_proyek, selected_gem, "assistant", response.text)
+                    except:
+                        st.error("❌ Semua model sibuk. Coba lagi nanti.")
                 else:
-                    st.error(f"Error Generasi: {e}")
+                    st.error(f"Error: {e}")
