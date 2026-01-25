@@ -54,13 +54,17 @@ def get_working_model():
 model_name_fix, error_msg = get_working_model()
 if error_msg: st.error(error_msg); st.stop()
 
-# --- 3. GEMS PERSONA ---
+# --- 3. DEFINISI OTAK GEMS (TIM AHLI LENGKAP) ---
 gems_persona = {
     "👔 Project Manager": "Kamu Senior Engineering Manager. Analisis permintaan user, tentukan ahli, verifikasi hasil.",
     "🏛️ Ahli Arsitektur": "Kamu Senior Architect. Fokus: Denah, Tampak, Material, Estetika Tropis.",
     "🏗️ Ahli Struktur": "Kamu Ahli Struktur SNI. Fokus: Beton, Baja, Pondasi.",
     "💰 Ahli Estimator": "Kamu QS (RAB). Fokus: Volume, Harga Satuan, Budgeting.",
     "🌊 Ahli Hidrologi": "Kamu Ahli Air. Fokus: Banjir, Drainase, Irigasi.",
+    "⚡ Ahli MEP": "Kamu Senior MEP Engineer. Fokus: Kelistrikan (Arus Kuat/Lemah), Plumbing (Air Bersih/Kotor), AC/HVAC, dan Fire Fighting.",
+    "💵 Ahli Keuangan (Akuntan)": "Kamu Project Accountant. Fokus: Cash Flow Proyek, Laporan Keuangan, Pajak (PPN/PPH), ROI, dan Manajemen Biaya Operasional.",
+    "📜 Ahli Perizinan (IMB/PBG)": "Kamu Konsultan Perizinan Bangunan. Fokus: Syarat PBG (Persetujuan Bangunan Gedung), SLF (Sertifikat Laik Fungsi), KRK, dan Regulasi Pemda.",
+    "🛣️ Ahli Jalan & Jembatan": "Kamu Highway Engineer. Fokus: Geometrik Jalan, Perkerasan Aspal/Beton.",
     "🐍 Python Lead": "Kamu Lead Programmer. Fokus: Coding Python & Streamlit.",
 }
 
@@ -72,17 +76,14 @@ with st.sidebar:
     
     # === BAGIAN SAVE & OPEN (RESTORE) ===
     with st.expander("💾 Save & Open Project", expanded=True):
-        # Tombol Download
         st.download_button("⬇️ Simpan Proyek (Backup)", db.export_data(), "enginex_data.json", mime="application/json")
-        
-        # Tombol Upload
         uploaded_file = st.file_uploader("⬆️ Buka Proyek (Restore)", type=["json"])
         if uploaded_file is not None:
             if st.button("Proses Restore Data"):
                 sukses, pesan = db.import_data(uploaded_file)
                 if sukses:
                     st.success(pesan)
-                    st.rerun() # Refresh halaman biar data muncul
+                    st.rerun() 
                 else:
                     st.error(pesan)
     
