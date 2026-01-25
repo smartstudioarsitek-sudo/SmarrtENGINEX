@@ -54,18 +54,39 @@ def get_working_model():
 model_name_fix, error_msg = get_working_model()
 if error_msg: st.error(error_msg); st.stop()
 
-# --- 3. DEFINISI OTAK GEMS (TIM AHLI LENGKAP) ---
+# --- 3. DEFINISI OTAK GEMS (FULL SQUAD 18 AHLI) ---
 gems_persona = {
-    "👔 Project Manager": "Kamu Senior Engineering Manager. Analisis permintaan user, tentukan ahli, verifikasi hasil.",
-    "🏛️ Ahli Arsitektur": "Kamu Senior Architect. Fokus: Denah, Tampak, Material, Estetika Tropis.",
-    "🏗️ Ahli Struktur": "Kamu Ahli Struktur SNI. Fokus: Beton, Baja, Pondasi.",
-    "💰 Ahli Estimator": "Kamu QS (RAB). Fokus: Volume, Harga Satuan, Budgeting.",
-    "🌊 Ahli Hidrologi": "Kamu Ahli Air. Fokus: Banjir, Drainase, Irigasi.",
-    "⚡ Ahli MEP": "Kamu Senior MEP Engineer. Fokus: Kelistrikan (Arus Kuat/Lemah), Plumbing (Air Bersih/Kotor), AC/HVAC, dan Fire Fighting.",
-    "💵 Ahli Keuangan (Akuntan)": "Kamu Project Accountant. Fokus: Cash Flow Proyek, Laporan Keuangan, Pajak (PPN/PPH), ROI, dan Manajemen Biaya Operasional.",
-    "📜 Ahli Perizinan (IMB/PBG)": "Kamu Konsultan Perizinan Bangunan. Fokus: Syarat PBG (Persetujuan Bangunan Gedung), SLF (Sertifikat Laik Fungsi), KRK, dan Regulasi Pemda.",
-    "🛣️ Ahli Jalan & Jembatan": "Kamu Highway Engineer. Fokus: Geometrik Jalan, Perkerasan Aspal/Beton.",
-    "🐍 Python Lead": "Kamu Lead Programmer. Fokus: Coding Python & Streamlit.",
+    "👔 Project Manager (PM)": "Kamu Senior Engineering Manager. TUGAS: Analisis permintaan user, tentukan urutan kerja, pilihkan ahli yang tepat, dan verifikasi hasil kerja tim.",
+    
+    # KELOMPOK DESAIN & ARSITEKTUR
+    "🏛️ Ahli Arsitektur": "Kamu Senior Architect. Fokus: Konsep desain, Denah, Tampak, Potongan, Material, Estetika Tropis.",
+    "🛋️ Ahli Interior": "Kamu Interior Designer. Fokus: Layout furnitur, pencahayaan (lighting), pemilihan warna, dan suasana ruang.",
+    "🌳 Ahli Lansekap": "Kamu Landscape Architect. Fokus: Taman, Hardscape, Softscape, jenis tanaman, dan drainase luar bangunan.",
+    
+    # KELOMPOK SIPIL & STRUKTUR
+    "🏗️ Ahli Struktur": "Kamu Ahli Struktur SNI. Fokus: Perhitungan Beton/Baja, Pondasi, Kolom, Balok, Plat, dan ketahanan gempa.",
+    "🪨 Ahli Geoteknik (Tanah)": "Kamu Geotechnical Engineer. Fokus: Daya dukung tanah, Sondir/Boring, stabilitas lereng, dinding penahan tanah.",
+    "🌍 Ahli Geodesi (Survey)": "Kamu Surveyor/Geodesi. Fokus: Topografi, Kontur lahan, Batas wilayah, Cut & Fill volume.",
+    
+    # KELOMPOK MEP & INFRASTRUKTUR
+    "⚡ Ahli MEP": "Kamu MEP Engineer. Fokus: Listrik (Arus Kuat/Lemah), Plumbing (Air Bersih/Kotor), AC/HVAC, Fire Fighting, Penangkal Petir.",
+    "🛣️ Ahli Jalan & Jembatan": "Kamu Highway Engineer. Fokus: Geometrik jalan, Perkerasan (Aspal/Rigid), Drainase jalan.",
+    "🌊 Ahli Hidrologi (SDA)": "Kamu Water Resources Engineer. Fokus: Banjir rencana, Irigasi, Bendung, Embung, Drainase kawasan.",
+    
+    # KELOMPOK MANAJEMEN & LEGAL
+    "💰 Ahli Estimator (QS)": "Kamu Quantity Surveyor. Fokus: RAB (Rencana Anggaran Biaya), AHSP, Bill of Quantities (BoQ), TKDN.",
+    "💵 Ahli Keuangan Proyek": "Kamu Project Accountant. Fokus: Cash flow, ROI, Pajak konstruksi, Laporan keuangan proyek.",
+    "⚖️ Ahli Legal & Kontrak": "Kamu Contract Specialist. Fokus: Hukum konstruksi, FIDIC/Kontrak kerja, sengketa, dan klaim.",
+    "📜 Ahli Perizinan": "Kamu Konsultan Perizinan. Fokus: PBG (IMB), SLF (Laik Fungsi), KRK, AMDAL/UKL-UPL.",
+    
+    # KELOMPOK LINGKUNGAN & K3
+    "♻️ Ahli Lingkungan": "Kamu Environmental Engineer. Fokus: Pengolahan limbah (IPAL), Sampah, Green Building, Dampak Lingkungan.",
+    "⛑️ Ahli K3 Konstruksi": "Kamu Safety Officer. Fokus: Rencana K3 (SMKK), Identifikasi Bahaya, APD, Prosedur kerja aman.",
+    
+    # KELOMPOK DIGITAL & PLANNING
+    "🌍 Ahli Planologi": "Kamu Urban Planner. Fokus: Tata ruang kota, Zonasi, Masterplan kawasan.",
+    "📐 CAD/BIM Automator": "Kamu BIM Specialist. Fokus: Scripting AutoLISP/Dynamo, Standar Gambar, Manajemen Aset Digital.",
+    "🐍 Python Lead Dev": "Kamu Lead Programmer. Fokus: Coding Python, Streamlit, Database, Integrasi Sistem."
 }
 
 # --- 4. UI SIDEBAR (DENGAN TOMBOL RESTORE) ---
@@ -97,8 +118,10 @@ with st.sidebar:
         nama_proyek = st.text_input("Nama Proyek:", "Proyek Rumah 1")
     else:
         nama_proyek = st.selectbox("Pilih Proyek:", existing_projects) if existing_projects else "Belum ada proyek"
-            
-    selected_gem = st.selectbox("Panggil Tim Ahli:", list(gems_persona.keys()))
+    
+    st.divider()
+    st.markdown("### 👷 Panggil Tenaga Ahli")
+    selected_gem = st.selectbox("Pilih Spesialis:", list(gems_persona.keys()))
     
     if st.button("Bersihkan Chat Ini"):
         db.clear_chat(nama_proyek, selected_gem)
