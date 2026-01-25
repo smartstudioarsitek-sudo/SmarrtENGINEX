@@ -23,18 +23,17 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- 1. SETUP API KEY (DENGAN PEMBERSIH & INPUT MANUAL) ---
+# --- 1. SETUP API KEY (INPUT MANUAL PRIORITAS) ---
 with st.sidebar:
     st.title("🏗️ ENGINEX")
     
-    # Prioritaskan Input Manual agar Kakak bisa ganti key kapan saja
+    # Input Key Manual
     api_key_input = st.text_input("🔑 API Key Baru (Wajib Diisi):", type="password")
     
     if api_key_input:
         raw_key = api_key_input
         st.caption("ℹ️ Memakai Key Manual")
     else:
-        # Cadangan ambil dari secrets kalau input kosong
         raw_key = st.secrets.get("GOOGLE_API_KEY")
         
     if not raw_key:
@@ -44,18 +43,62 @@ with st.sidebar:
     # BERSIHKAN KEY (Hapus spasi/enter tersembunyi)
     clean_api_key = raw_key.strip()
 
-# KONFIGURASI JALUR REST (Supaya tidak timeout/illegal metadata)
+# KONFIGURASI JALUR REST (Supaya tidak timeout)
 try:
     genai.configure(api_key=clean_api_key, transport="rest")
 except Exception as e:
     st.error(f"Gagal Konfigurasi: {e}")
 
-# --- 2. MODEL SELECTION (HARDCODED - JANGAN AUTO DETECT LAGI) ---
-# Kita paksa pakai 1.5 Flash (Kuota 1500/hari)
-# Jangan biarkan AI memilih 2.5 Flash (Kuota cuma 20/hari)
-TARGET_MODEL = "gemini-1.5-flash"
+# --- 2. AUTO-DISCOVERY MODEL (JURUS ANTI SALAH NAMA) ---
+@st.cache_resource
+def find_best_model(api_key_trigger):
+    try:
+        # Minta daftar model yang tersedia untuk KEY ini
+        all_models = genai.list_models()
+        valid_models = []
+        for m in all_models:
+            if 'generateContent' in m.supported_generation_methods:
+                valid_models.append(m.name)
+        
+        if not valid_models:
+            return None, "Tidak ada model yang aktif di Key ini."
 
-# --- 3. DEFINISI OTAK GEMS (FULL TEAM SESUAI GAMBAR) ---
+        # LOGIKA PEMILIHAN (Cari yang Flash 1.5 dulu biar irit)
+        chosen_model = None
+        
+        # Prioritas 1: Cari yang namanya persis "gemini-1.5-flash"
+        for m in valid_models:
+            if "gemini-1.5-flash" in m and "001" in m: # Versi stabil 001
+                chosen_model = m
+                break
+        
+        # Prioritas 2: Kalau gak ada, cari Flash 1.5 apa saja
+        if not chosen_model:
+            for m in valid_models:
+                if "gemini-1.5-flash" in m:
+                    chosen_model = m
+                    break
+        
+        # Prioritas 3: Cari Gemini Pro (Cadangan)
+        if not chosen_model:
+            for m in valid_models:
+                if "gemini-pro" in m:
+                    chosen_model = m
+                    break
+        
+        # Darurat: Ambil model pertama yang ada
+        if not chosen_model and valid_models:
+            chosen_model = valid_models[0]
+            
+        return chosen_model, None, valid_models
+
+    except Exception as e:
+        return None, str(e), []
+
+# JALANKAN PENCARIAN
+target_model, error_msg, debug_list = find_best_model(clean_api_key)
+
+# --- 3. DEFINISI OTAK GEMS ---
 gems_persona = {
     "👔 Project Manager (PM)": "Kamu Senior Engineering Manager. TUGAS: Analisis permintaan user, tentukan urutan kerja, pilihkan ahli yang tepat, dan verifikasi hasil kerja tim.",
     "📝 Drafter Laporan DED (Spesialis PUPR)": "Kamu asisten pembuat laporan yang pintar. Fokus: Menyusun Laporan Pendahuluan, Antara, Akhir (Word), Spek Teknis, dan Notulensi Rapat.",
@@ -86,8 +129,18 @@ gems_persona = {
 
 # --- 4. UI SIDEBAR ---
 with st.sidebar:
-    # Tampilkan Model yang Dipaksa
-    st.caption(f"Status: ✅ Terhubung\nModel: `{TARGET_MODEL}` (Kuota Besar)") 
+    if target_model:
+        st.success(f"✅ Terhubung: {target_model}")
+    else:
+        st.error("❌ Koneksi Gagal")
+        
+    # DEBUGGER (Biar ketahuan apa isinya)
+    with st.expander("🛠️ Cek Debug (Klik Disini)"):
+        if error_msg:
+            st.write(f"Error: {error_msg}")
+        else:
+            st.write("Model yang ditemukan:", debug_list)
+
     st.divider()
     
     # === SAVE & RESTORE ===
@@ -137,34 +190,22 @@ if prompt := st.chat_input("Ketik pesan..."):
 
     with st.chat_message("assistant"):
         with st.spinner(f"{selected_gem} berpikir..."):
-            try:
-                # PAKSA PAKE 1.5 FLASH
-                model = genai.GenerativeModel(TARGET_MODEL)
-                
-                full_prompt = f"PERAN: {gems_persona[selected_gem]}\nUSER: {prompt}"
-                
-                chat_history_formatted = [{"role": "user" if h['role']=="user" else "model", "parts": [h['content']]} for h in history]
-                
-                chat = model.start_chat(history=chat_history_formatted)
-                response = chat.send_message(full_prompt)
-                
-                st.markdown(response.text)
-                db.simpan_chat(nama_proyek, selected_gem, "assistant", response.text)
-                
-            except Exception as e:
-                err_msg = str(e)
-                if "429" in err_msg:
-                    # Kalau masih limit juga, berarti API Key-nya beneran habis total
-                    st.error("⚠️ Kuota API Key Habis Total. Mohon input API KEY BARU lagi di Sidebar.")
-                elif "404" in err_msg:
-                    # Fallback kalau 1.5 Flash lagi down, pakai Pro
-                    try:
-                        fallback_model = genai.GenerativeModel("gemini-pro")
-                        chat = fallback_model.start_chat(history=chat_history_formatted)
-                        response = chat.send_message(full_prompt)
-                        st.markdown(response.text)
-                        db.simpan_chat(nama_proyek, selected_gem, "assistant", response.text)
-                    except:
-                        st.error("❌ Semua model sibuk. Coba lagi nanti.")
-                else:
-                    st.error(f"Error: {e}")
+            if not target_model:
+                st.error("❌ API Key bermasalah atau Kuota Habis. Cek Sidebar.")
+            else:
+                try:
+                    # PAKAI MODEL YANG SUDAH DITEMUKAN (PASTI ADA)
+                    model = genai.GenerativeModel(target_model)
+                    
+                    full_prompt = f"PERAN: {gems_persona[selected_gem]}\nUSER: {prompt}"
+                    
+                    chat_history_formatted = [{"role": "user" if h['role']=="user" else "model", "parts": [h['content']]} for h in history]
+                    
+                    chat = model.start_chat(history=chat_history_formatted)
+                    response = chat.send_message(full_prompt)
+                    
+                    st.markdown(response.text)
+                    db.simpan_chat(nama_proyek, selected_gem, "assistant", response.text)
+                    
+                except Exception as e:
+                    st.error(f"Error Generasi: {e}")
