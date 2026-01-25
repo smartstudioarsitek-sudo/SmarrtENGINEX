@@ -7,4 +7,5 @@ matplotlib
 folium
 streamlit-folium
 google-generativeai>=0.7.0
-google-generativeai
+
+
