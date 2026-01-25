@@ -116,7 +116,7 @@ if prompt := st.chat_input("Tulis instruksi Anda di sini..."):
                 if "Project Manager" in selected_gem:
                     full_instruction += f"\n\nTim yang tersedia: {', '.join(gems_persona.keys())}"
 
-                model = genai.GenerativeModel('gemini-1.5-pro', system_instruction=full_instruction)
+                model = genai.GenerativeModel('gemini-1.5-flash', system_instruction=full_instruction)
                 
                 # Kirim chat history sebelumnya sebagai konteks (agar nyambung)
                 chat_session = model.start_chat(history=[
@@ -134,3 +134,4 @@ if prompt := st.chat_input("Tulis instruksi Anda di sini..."):
                 
             except Exception as e:
                 st.error(f"Error AI: {e}")
+
