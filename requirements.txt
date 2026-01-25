@@ -1,0 +1,9 @@
+streamlit
+pandas
+plotly
+xlsxwriter
+openpyxl
+matplotlib
+folium
+streamlit-folium
+google-generativeai
