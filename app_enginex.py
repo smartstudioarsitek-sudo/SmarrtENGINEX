@@ -23,12 +23,12 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- 1. SETUP API KEY & MODEL SELECTOR (SIDEBAR) ---
+# --- 1. SETUP API KEY ---
 with st.sidebar:
     st.title("🏗️ ENGINEX")
     
-    # A. INPUT API KEY
-    api_key_input = st.text_input("🔑 API Key (Wajib):", type="password", help="Masukkan Key dari aistudio.google.com")
+    # Input API Key
+    api_key_input = st.text_input("🔑 API Key:", type="password")
     
     if api_key_input:
         raw_key = api_key_input
@@ -42,70 +42,81 @@ with st.sidebar:
         
     clean_api_key = raw_key.strip()
 
-    st.divider()
-
-    # B. PILIH MODEL MANUAL (SOLUSI ANTI ERROR 404/429)
-    # Kita sediakan daftar model yang valid. User tinggal pilih.
-    pilihan_model = [
-        "gemini-1.5-flash",          # Paling Irit (Prioritas 1)
-        "gemini-1.5-flash-001",      # Alternatif Flash
-        "gemini-1.5-flash-latest",   # Alternatif Flash
-        "gemini-pro",                # Cadangan (Versi 1.0)
-        "gemini-1.5-pro",            # Versi Pro (Cepat Limit)
-    ]
-    
-    selected_model_name = st.selectbox(
-        "🤖 Pilih Model AI:", 
-        pilihan_model, 
-        index=0, # Default pilih yang pertama (Flash)
-        help="Pilih 'gemini-1.5-flash' agar kuota hemat. Jangan pilih yang '2.5' atau 'Pro' jika akun gratis."
-    )
-    
-    st.caption(f"Status: ✅ Siap | Model: `{selected_model_name}`")
-
-# KONFIGURASI GOOGLE AI (Jalur REST)
+# KONFIGURASI AWAL
 try:
     genai.configure(api_key=clean_api_key, transport="rest")
 except Exception as e:
-    st.error(f"Gagal Konek: {e}")
+    st.error(f"Error Config: {e}")
 
-# --- 2. DEFINISI OTAK GEMS (FULL TEAM) ---
+# --- 2. FITUR "LIST REAL-TIME" (JURUS ANTI 404) ---
+# Kita minta Google kasih tau model apa yang tersedia buat Key ini
+@st.cache_resource
+def get_available_models_from_google(api_key_trigger):
+    try:
+        model_list = []
+        for m in genai.list_models():
+            if 'generateContent' in m.supported_generation_methods:
+                model_list.append(m.name)
+        return model_list, None
+    except Exception as e:
+        return [], str(e)
+
+# Panggil fungsi
+real_models, error_msg = get_available_models_from_google(clean_api_key)
+
+with st.sidebar:
+    st.divider()
+    if error_msg:
+        st.error(f"❌ Gagal mengambil daftar model: {error_msg}")
+        st.stop()
+    
+    if not real_models:
+        st.warning("⚠️ API Key valid, tapi tidak ada model yang tersedia.")
+        st.stop()
+
+    # --- LOGIKA CERDAS MEMILIH DEFAULT ---
+    # Kita cari index model "Flash 1.5" agar jadi pilihan default (karena paling aman)
+    default_index = 0
+    for i, m in enumerate(real_models):
+        if "gemini-1.5-flash" in m and "latest" in m: # Prioritas 1
+            default_index = i; break
+        elif "gemini-1.5-flash" in m: # Prioritas 2
+            default_index = i; break
+            
+    # DROPDOWN SAKTI (Hanya menampilkan yang BENAR-BENAR ADA)
+    selected_model_name = st.selectbox(
+        "🤖 Pilih Model (Data dari Google):", 
+        real_models,
+        index=default_index,
+        help="Pilih model yang mengandung kata '1.5-flash' untuk kuota paling hemat."
+    )
+    
+    st.success(f"✅ Aktif: `{selected_model_name}`")
+
+# --- 3. DEFINISI OTAK GEMS (FULL TEAM) ---
 gems_persona = {
-    # === A. MANAJEMEN & LEAD ===
     "👔 Project Manager (PM)": "Kamu Senior Engineering Manager. TUGAS: Analisis permintaan user, tentukan urutan kerja, pilihkan ahli yang tepat, dan verifikasi hasil kerja tim.",
     "📝 Drafter Laporan DED (Spesialis PUPR)": "Kamu asisten pembuat laporan yang pintar. Fokus: Menyusun Laporan Pendahuluan, Antara, Akhir (Word), Spek Teknis, dan Notulensi Rapat.",
     "⚖️ Ahli Legal & Kontrak": "Kamu Contract Specialist. Fokus: Hukum Konstruksi, Kontrak (FIDIC/Lumpsum), Klaim, dan Sengketa.",
-
-    # === B. SUMBER DAYA AIR (SDA) & PANTAI ===
     "🌾 Ahli IKSI-PAI (Permen PUPR)": "Kamu Konsultan Teknis Irigasi Senior. Hafal bobot, kriteria, dan cara menilai kondisi fisik vs fungsi (IKSI). Fokus: Blangko 01-O s/d 09-O dan PAI.",
     "🌊 Ahli Bangunan Air & Irigasi (The Designer)": "Mencakup: Desain Irigasi, Bendung (Weir), Bendungan (Dam), Hidraulika. Fokus: Desain fisik, stabilitas struktur air.",
     "🌧️ Ahli Hidrologi & Sungai (The Analyst)": "Mencakup: Hidrologi, Curah hujan, Klimatologi, Pola tanam, FJ Mock, Desain Banjir, Teknik Sungai. Fokus: Analisis data air.",
     "🏖️ Ahli Teknik Pantai (The Coastal Expert)": "Mencakup: Ahli Pantai, Pelabuhan, Pasang Surut. Fokus: Dinamika laut, Breakwater, Seawall, dan proteksi garis pantai.",
-
-    # === C. SIPIL & INFRASTRUKTUR ===
     "🏗️ Ahli Struktur (Structural Expert)": "Fokus: Kekuatan Bangunan, Standar SNI, Hitungan Beton/Baja. Gunakan untuk: Menentukan dimensi kolom/balok/plat.",
     "🪨 Ahli Geoteknik & Mekanika Tanah": "Fokus: Penyelidikan Tanah (Sondir/Boring), Daya Dukung, Stabilitas Lereng, Perbaikan Tanah.",
     "🛣️ Ahli Jalan & Jembatan": "Fokus: Geometrik Jalan, Perkerasan (Pavement), Struktur Jembatan. Basis: Standar Bina Marga (PUPR) & AASHTO.",
     "🌍 Ahli Geodesi & GIS": "Fokus: Survey Topografi, Pengukuran (Total Station/GPS), Fotogrametri (Drone), Perhitungan Galian/Timbunan (Cut & Fill).",
-
-    # === D. ARSITEKTUR & VISUAL ===
     "🏛️ Senior Architect & Interior": "Fokus: Bangunan, Estetika, Fungsi Ruang, Material, Utilitas Bangunan, Interior Layout.",
     "🌳 Landscape Architect (Lansekap)": "Fokus: Ruang Luar, Tanaman, Hardscape, Resapan Air. Gunakan untuk: Desain taman, area hijau.",
     "🎨 Creative Director ArchViz (3D & Animation)": "Fokus: Konsep Visual, Storytelling, Cinematography, Prompt Engineering (AI Image), dan Arahan Teknis Rendering (Lumion/Enscape/D5).",
     "🌍 Ahli Planologi (Urban Planner)": "Fokus: Makro Wilayah, Peraturan (RTRW/RDTR), Perizinan, Analisis Tapak Kawasan.",
-
-    # === E. LINGKUNGAN & PROSES ===
     "🏭 Ahli Proses Industri (Chemical Engineer)": "Fokus: Pengolahan Minyak Mentah/Olie Bekas, Pipa Industri, Proses Kimia. (Ranah Teknik Kimia).",
     "📜 Ahli AMDAL & Dokumen Lingkungan": "Fokus: AMDAL, UKL-UPL. Bukan soal hitungan teknik, tapi soal Hukum Lingkungan, Dampak Sosial, dan Biologi.",
     "♻️ Ahli Teknik Lingkungan (Sanitary)": "Fokus: Ilmu IPAL (Air Limbah), IPLT (Lumpur Tinja), TPA (Sampah), dan Air Bersih (WTP).",
     "⛑️ Ahli K3 Konstruksi": "Fokus: Rencana K3 (SMKK), Identifikasi Bahaya, APD, Prosedur Kerja Aman.",
-
-    # === F. DIGITAL & SOFTWARE ===
     "💻 Lead Engineering Developer": "Kamu Programmer Teknik. Tidak perlu hafal pasal, tapi jago menerjemahkan tabel penilaian menjadi Kode Python/Streamlit/Database.",
     "📐 CAD & BIM Automator": "Fokus: Penulis script AutoLISP (AutoCAD) dan Dynamo (Revit) untuk otomatisasi gambar.",
     "🖥️ Instruktur Software": "Kamu Guru Software Teknik. WAJIB: Jelaskan Step-by-step & Berikan Link Youtube Search di akhir.",
-
-    # === G. BIAYA & KEUANGAN ===
     "💰 Ahli Estimator & RAB": "Fokus: Volume Material, BOQ, Harga Satuan (AHSP), Budgeting. Gunakan untuk: Menghitung biaya proyek.",
     "💵 Ahli Keuangan Proyek": "Fokus: Cashflow, Pajak Proyek, Laporan Keuangan, ROI.",
     "📜 Ahli Perizinan (IMB/PBG)": "Fokus: Pengurusan Izin Bangunan Gedung (PBG), SLF, KRK."
@@ -157,7 +168,7 @@ if prompt := st.chat_input("Ketik pesan..."):
     with st.chat_message("assistant"):
         with st.spinner(f"{selected_gem} berpikir..."):
             try:
-                # INSTANSIASI MODEL DARI PILIHAN MANUAL USER
+                # PAKAI NAMA MODEL DARI DROPDOWN (YANG PASTI BENAR)
                 model = genai.GenerativeModel(selected_model_name)
                 
                 full_prompt = f"PERAN: {gems_persona[selected_gem]}\nUSER: {prompt}"
@@ -171,10 +182,9 @@ if prompt := st.chat_input("Ketik pesan..."):
                 db.simpan_chat(nama_proyek, selected_gem, "assistant", response.text)
                 
             except Exception as e:
+                # Error Handling yang Jelas
                 err_msg = str(e)
                 if "429" in err_msg:
-                    st.error(f"⚠️ Model '{selected_model_name}' Limit/Habis. Silakan PILIH MODEL LAIN di Sidebar (Misal: gemini-1.5-flash-001).")
-                elif "404" in err_msg:
-                     st.error(f"⚠️ Model '{selected_model_name}' Tidak Ditemukan. Silakan PILIH MODEL LAIN di Sidebar.")
+                    st.error(f"⚠️ Model `{selected_model_name}` Limit Habis! Silakan GANTI PILIHAN MODEL di Sidebar ke yang lain (Cari 'Flash 1.5').")
                 else:
-                    st.error(f"Error: {e}")
+                    st.error(f"Error Generasi: {e}")
