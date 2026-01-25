@@ -1,6 +1,7 @@
 import streamlit as st
 import google.generativeai as genai
 import pandas as pd
+import json
 
 # --- KONFIGURASI HALAMAN ---
 st.set_page_config(page_title="ENGINEX Super App", page_icon="🏗️", layout="wide")
@@ -33,42 +34,29 @@ if not api_key:
 
 genai.configure(api_key=api_key)
 
-# --- 2. LOGIKA AUTO-DETECT MODEL (JURUS ANTI 404) ---
-# Kita tidak menembak nama model, tapi minta daftar dari Google
+# --- 2. AUTO-DETECT MODEL ---
 @st.cache_resource
 def get_working_model():
     try:
         available_models = []
-        # Minta daftar model yang bisa generate text
         for m in genai.list_models():
             if 'generateContent' in m.supported_generation_methods:
                 available_models.append(m.name)
+        if not available_models: return None, "Tidak ada model."
         
-        if not available_models:
-            return None, "Tidak ada model AI yang tersedia untuk Key ini."
-
-        # Prioritas: Cari yang ada kata 'flash' (cepat), kalau tidak ada cari 'pro'
-        chosen_model_name = available_models[0] # Ambil yang pertama ketemu sbg cadangan
+        chosen = available_models[0]
         for m in available_models:
-            if "flash" in m: 
-                chosen_model_name = m; break
-            elif "pro" in m and "vision" not in m:
-                chosen_model_name = m
-        
-        return chosen_model_name, None
-    except Exception as e:
-        return None, str(e)
+            if "flash" in m: chosen = m; break
+            elif "pro" in m and "vision" not in m: chosen = m
+        return chosen, None
+    except Exception as e: return None, str(e)
 
-# Panggil fungsi deteksi
 model_name_fix, error_msg = get_working_model()
+if error_msg: st.error(error_msg); st.stop()
 
-if error_msg:
-    st.error(f"❌ Masalah Akun Google AI: {error_msg}")
-    st.stop()
-
-# --- 3. DEFINISI OTAK GEMS ---
+# --- 3. GEMS PERSONA ---
 gems_persona = {
-    "👔 Project Manager": "Kamu Senior Engineering Manager. Analisis permintaan user, tentukan ahli yang dibutuhkan, dan verifikasi hasil.",
+    "👔 Project Manager": "Kamu Senior Engineering Manager. Analisis permintaan user, tentukan ahli, verifikasi hasil.",
     "🏛️ Ahli Arsitektur": "Kamu Senior Architect. Fokus: Denah, Tampak, Material, Estetika Tropis.",
     "🏗️ Ahli Struktur": "Kamu Ahli Struktur SNI. Fokus: Beton, Baja, Pondasi.",
     "💰 Ahli Estimator": "Kamu QS (RAB). Fokus: Volume, Harga Satuan, Budgeting.",
@@ -76,24 +64,42 @@ gems_persona = {
     "🐍 Python Lead": "Kamu Lead Programmer. Fokus: Coding Python & Streamlit.",
 }
 
-# --- 4. UI SIDEBAR ---
+# --- 4. UI SIDEBAR (DENGAN TOMBOL RESTORE) ---
 with st.sidebar:
     st.title("🏗️ ENGINEX")
-    st.caption(f"Status AI: ✅ Terhubung\nModel: `{model_name_fix}`") # Info model yang dipakai
+    st.caption(f"Status AI: ✅ Terhubung\nModel: `{model_name_fix}`")
     st.divider()
     
+    # === BAGIAN SAVE & OPEN (RESTORE) ===
+    with st.expander("💾 Save & Open Project", expanded=True):
+        # Tombol Download
+        st.download_button("⬇️ Simpan Proyek (Backup)", db.export_data(), "enginex_data.json", mime="application/json")
+        
+        # Tombol Upload
+        uploaded_file = st.file_uploader("⬆️ Buka Proyek (Restore)", type=["json"])
+        if uploaded_file is not None:
+            if st.button("Proses Restore Data"):
+                sukses, pesan = db.import_data(uploaded_file)
+                if sukses:
+                    st.success(pesan)
+                    st.rerun() # Refresh halaman biar data muncul
+                else:
+                    st.error(pesan)
+    
+    st.divider()
+    
+    # Pilih Proyek
     existing_projects = db.daftar_proyek()
-    mode_proyek = st.radio("Mode:", ["Proyek Baru", "Buka Proyek Lama"])
+    mode_proyek = st.radio("Mode Kerja:", ["Proyek Baru", "Buka Proyek Lama"])
     
     if mode_proyek == "Proyek Baru":
         nama_proyek = st.text_input("Nama Proyek:", "Proyek Rumah 1")
     else:
-        nama_proyek = st.selectbox("Pilih Proyek:", existing_projects) if existing_projects else "Proyek Default"
+        nama_proyek = st.selectbox("Pilih Proyek:", existing_projects) if existing_projects else "Belum ada proyek"
             
-    st.divider()
     selected_gem = st.selectbox("Panggil Tim Ahli:", list(gems_persona.keys()))
     
-    if st.button("Hapus Chat"):
+    if st.button("Bersihkan Chat Ini"):
         db.clear_chat(nama_proyek, selected_gem)
         st.rerun()
 
@@ -114,17 +120,10 @@ if prompt := st.chat_input("Ketik pesan..."):
     with st.chat_message("assistant"):
         with st.spinner(f"{selected_gem} berpikir..."):
             try:
-                # INSTANSIASI MODEL DENGAN NAMA YANG SUDAH DITEMUKAN (AUTO)
                 model = genai.GenerativeModel(model_name_fix)
-                
-                # Instruksi Manual
                 full_prompt = f"PERAN: {gems_persona[selected_gem]}\nUSER: {prompt}"
                 
-                # Chat logic standar (history manual untuk aman)
-                chat_history_formatted = [
-                    {"role": "user" if h['role']=="user" else "model", "parts": [h['content']]} 
-                    for h in history
-                ]
+                chat_history_formatted = [{"role": "user" if h['role']=="user" else "model", "parts": [h['content']]} for h in history]
                 
                 chat = model.start_chat(history=chat_history_formatted)
                 response = chat.send_message(full_prompt)
