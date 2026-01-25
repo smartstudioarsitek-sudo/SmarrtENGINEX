@@ -34,27 +34,35 @@ if not api_key:
 
 genai.configure(api_key=api_key)
 
-# --- 2. AUTO-DETECT MODEL ---
+# --- 2. AUTO-DETECT MODEL (VERSI PERBAIKAN: CARI YANG KUOTA BESAR) ---
 @st.cache_resource
 def get_working_model():
     try:
-        available_models = []
-        for m in genai.list_models():
-            if 'generateContent' in m.supported_generation_methods:
-                available_models.append(m.name)
-        if not available_models: return None, "Tidak ada model."
+        # Kita minta daftar model dari Google
+        available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
         
-        chosen = available_models[0]
+        # PRIORITAS: Cari 'gemini-1.5-flash' (Kuota 1500/hari)
+        # Jangan pakai yang 2.0 atau 2.5 dulu karena kuota dikit
         for m in available_models:
-            if "flash" in m: chosen = m; break
-            elif "pro" in m and "vision" not in m: chosen = m
-        return chosen, None
+            if "gemini-1.5-flash" in m:
+                return m, None
+        
+        # Cadangan: Cari 'gemini-pro'
+        for m in available_models:
+            if "gemini-pro" in m and "vision" not in m:
+                return m, None
+                
+        # Kalau kepepet banget, baru ambil sembarang yang ada
+        if available_models:
+            return available_models[0], None
+            
+        return None, "Tidak ada model AI yang aktif."
     except Exception as e: return None, str(e)
 
 model_name_fix, error_msg = get_working_model()
 if error_msg: st.error(error_msg); st.stop()
 
-# --- 3. DEFINISI OTAK GEMS (FULL TEAM SESUAI GAMBAR) ---
+# --- 3. DEFINISI OTAK GEMS (FINAL: SESUAI SCREENSHOT) ---
 gems_persona = {
     # === A. MANAJEMEN & LEAD ===
     "👔 Project Manager (PM)": "Kamu Senior Engineering Manager. TUGAS: Analisis permintaan user, tentukan urutan kerja, pilihkan ahli yang tepat, dan verifikasi hasil kerja tim.",
@@ -125,7 +133,7 @@ with st.sidebar:
     
     st.divider()
     
-    # PILIH AHLI (SEMUA DITAMPILKAN DI SINI)
+    # PILIH AHLI
     st.markdown("### 👷 Pilih Tenaga Ahli")
     selected_gem = st.selectbox("Daftar Tim Ahli Lengkap:", list(gems_persona.keys()))
     
@@ -162,4 +170,9 @@ if prompt := st.chat_input("Ketik pesan..."):
                 db.simpan_chat(nama_proyek, selected_gem, "assistant", response.text)
                 
             except Exception as e:
-                st.error(f"Error Generasi: {e}")
+                # DETEKSI ERROR 429 (QUOTA) BIAR USER GAK BINGUNG
+                err_msg = str(e)
+                if "429" in err_msg:
+                    st.error("⚠️ Kuota Harian Limit Tercapai. Mohon tunggu beberapa saat atau ganti API Key.")
+                else:
+                    st.error(f"Error Generasi: {e}")
