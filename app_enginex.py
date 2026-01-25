@@ -12,119 +12,125 @@ try:
         st.session_state.backend = EnginexBackend()
     db = st.session_state.backend
 except ImportError:
-    st.error("⚠️ File 'backend_enginex.py' belum dibuat! Silakan buat file tersebut di GitHub.")
+    st.error("⚠️ File 'backend_enginex.py' belum dibuat di GitHub!")
     st.stop()
 
-# --- CSS PRO ---
+# --- CSS ---
 st.markdown("""
 <style>
     .main-header {font-size: 30px; font-weight: bold; color: #1E3A8A; margin-bottom: 10px;}
-    .chat-box {border: 1px solid #ddd; padding: 15px; border-radius: 10px; height: 400px; overflow-y: scroll;}
-    div.stButton > button {width: 100%;}
 </style>
 """, unsafe_allow_html=True)
 
-# --- 1. SETUP API KEY (WAJIB) ---
+# --- 1. SETUP API KEY ---
 api_key = st.secrets.get("GOOGLE_API_KEY")
 if not api_key:
     with st.sidebar:
         api_key = st.text_input("🔑 Masukkan Gemini API Key:", type="password")
         if not api_key:
-            st.warning("Masukkan API Key untuk mengaktifkan AI.")
+            st.warning("Masukkan API Key dulu.")
             st.stop()
 
 genai.configure(api_key=api_key)
 
-# --- 2. DEFINISI OTAK GEMS (TIM AHLI) ---
+# --- 2. LOGIKA AUTO-DETECT MODEL (JURUS ANTI 404) ---
+# Kita tidak menembak nama model, tapi minta daftar dari Google
+@st.cache_resource
+def get_working_model():
+    try:
+        available_models = []
+        # Minta daftar model yang bisa generate text
+        for m in genai.list_models():
+            if 'generateContent' in m.supported_generation_methods:
+                available_models.append(m.name)
+        
+        if not available_models:
+            return None, "Tidak ada model AI yang tersedia untuk Key ini."
+
+        # Prioritas: Cari yang ada kata 'flash' (cepat), kalau tidak ada cari 'pro'
+        chosen_model_name = available_models[0] # Ambil yang pertama ketemu sbg cadangan
+        for m in available_models:
+            if "flash" in m: 
+                chosen_model_name = m; break
+            elif "pro" in m and "vision" not in m:
+                chosen_model_name = m
+        
+        return chosen_model_name, None
+    except Exception as e:
+        return None, str(e)
+
+# Panggil fungsi deteksi
+model_name_fix, error_msg = get_working_model()
+
+if error_msg:
+    st.error(f"❌ Masalah Akun Google AI: {error_msg}")
+    st.stop()
+
+# --- 3. DEFINISI OTAK GEMS ---
 gems_persona = {
-    "👔 Project Manager (Verifikator)": """
-        Kamu adalah Senior Engineering Manager. TUGAS UTAMA:
-        1. Menganalisis permintaan user.
-        2. Menentukan Gem mana yang harus dipanggil (Arsitek/Sipil/Estimator).
-        3. VERIFIKASI: Mengecek hasil kerja Gem lain.
-    """,
-    "🏛️ Ahli Arsitektur (Design)": "Kamu Senior Architect. Fokus: Konsep, Denah, Tampak, Material, Estetika Tropis.",
-    "🏗️ Ahli Struktur (Sipil)": "Kamu Ahli Struktur SNI. Fokus: Beton, Baja, Pondasi, Etabs/SAP2000.",
-    "💰 Ahli Estimator (RAB)": "Kamu Quantity Surveyor (QS). Fokus: Volume, Harga Satuan, Budgeting.",
-    "🌍 Ahli Planologi (Tata Ruang)": "Kamu Urban Planner. Fokus: Zonasi, KDB/KLB, GIS, Peraturan Daerah.",
-    "🌊 Ahli Hidrologi (Air)": "Kamu Hydrologist. Fokus: Banjir, Drainase, Irigasi, Bendung.",
-    "⚡ Ahli MEP (Mekanikal Elektrikal)": "Kamu Ahli MEP. Fokus: Listrik, Plumbing, AC, Pemadam Kebakaran.",
-    "🛣️ Ahli Jalan & Jembatan": "Kamu Highway Engineer. Fokus: Geometrik Jalan, Perkerasan Aspal/Beton.",
-    "🐍 Python Lead Developer": "Kamu Lead Programmer. Fokus: Coding Python, Streamlit, Database SQLite.",
-    "📐 CAD/BIM Automator": "Kamu Ahli Scripting. Fokus: AutoLISP (AutoCAD) dan Dynamo (Revit)."
+    "👔 Project Manager": "Kamu Senior Engineering Manager. Analisis permintaan user, tentukan ahli yang dibutuhkan, dan verifikasi hasil.",
+    "🏛️ Ahli Arsitektur": "Kamu Senior Architect. Fokus: Denah, Tampak, Material, Estetika Tropis.",
+    "🏗️ Ahli Struktur": "Kamu Ahli Struktur SNI. Fokus: Beton, Baja, Pondasi.",
+    "💰 Ahli Estimator": "Kamu QS (RAB). Fokus: Volume, Harga Satuan, Budgeting.",
+    "🌊 Ahli Hidrologi": "Kamu Ahli Air. Fokus: Banjir, Drainase, Irigasi.",
+    "🐍 Python Lead": "Kamu Lead Programmer. Fokus: Coding Python & Streamlit.",
 }
 
-# --- 3. UI SIDEBAR ---
+# --- 4. UI SIDEBAR ---
 with st.sidebar:
     st.title("🏗️ ENGINEX")
-    st.caption("Integrated Engineering AI")
+    st.caption(f"Status AI: ✅ Terhubung\nModel: `{model_name_fix}`") # Info model yang dipakai
     st.divider()
     
     existing_projects = db.daftar_proyek()
     mode_proyek = st.radio("Mode:", ["Proyek Baru", "Buka Proyek Lama"])
     
     if mode_proyek == "Proyek Baru":
-        nama_proyek = st.text_input("Nama Proyek Baru:", "Desain Rumah Tipe 45")
+        nama_proyek = st.text_input("Nama Proyek:", "Proyek Rumah 1")
     else:
-        if existing_projects:
-            nama_proyek = st.selectbox("Daftar Proyek:", existing_projects)
-        else:
-            st.warning("Belum ada proyek tersimpan.")
-            nama_proyek = "Project Default"
+        nama_proyek = st.selectbox("Pilih Proyek:", existing_projects) if existing_projects else "Proyek Default"
             
     st.divider()
+    selected_gem = st.selectbox("Panggil Tim Ahli:", list(gems_persona.keys()))
     
-    selected_gem = st.selectbox("Siapa yang mau ditanya?", list(gems_persona.keys()))
-    
-    if st.button("🗑️ Hapus Chat Proyek Ini"):
+    if st.button("Hapus Chat"):
         db.clear_chat(nama_proyek, selected_gem)
         st.rerun()
 
-    st.divider()
-    st.download_button("💾 Backup Semua Data", db.export_data(), "enginex_full_backup.json")
-
-# --- 4. AREA UTAMA (CHAT INTERFACE) ---
+# --- 5. AREA CHAT ---
 st.markdown(f'<div class="main-header">{nama_proyek}</div>', unsafe_allow_html=True)
-st.caption(f"Sedang berdiskusi dengan: **{selected_gem}**")
+st.caption(f"Diskusi dengan: **{selected_gem}**")
 
-# A. Tampilkan History
 history = db.get_chat_history(nama_proyek, selected_gem)
 for chat in history:
     with st.chat_message(chat['role']):
         st.markdown(chat['content'])
 
-# B. Input User
-if prompt := st.chat_input("Tulis instruksi Anda di sini..."):
+if prompt := st.chat_input("Ketik pesan..."):
     db.simpan_chat(nama_proyek, selected_gem, "user", prompt)
     with st.chat_message("user"):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        with st.spinner(f"{selected_gem} sedang berpikir..."):
+        with st.spinner(f"{selected_gem} berpikir..."):
             try:
-                # --- PERBAIKAN DI SINI (JURUS STABIL) ---
-                # 1. Kita pakai 'gemini-pro' (pasti ada)
-                # 2. Hapus parameter 'system_instruction' di dalam kurung GenerativeModel
-                model = genai.GenerativeModel('gemini-pro')
+                # INSTANSIASI MODEL DENGAN NAMA YANG SUDAH DITEMUKAN (AUTO)
+                model = genai.GenerativeModel(model_name_fix)
                 
-                # 3. Tempelkan instruksi manual di depan pertanyaan user
-                instruksi = gems_persona[selected_gem]
-                if "Project Manager" in selected_gem:
-                    instruksi += f"\n\nTim tersedia: {', '.join(gems_persona.keys())}"
+                # Instruksi Manual
+                full_prompt = f"PERAN: {gems_persona[selected_gem]}\nUSER: {prompt}"
                 
-                pesan_final = f"PERAN KAMU: {instruksi}\n\nPERTANYAAN USER: {prompt}"
-
-                # 4. Mulai Chat dengan History
-                chat_session = model.start_chat(history=[
+                # Chat logic standar (history manual untuk aman)
+                chat_history_formatted = [
                     {"role": "user" if h['role']=="user" else "model", "parts": [h['content']]} 
                     for h in history
-                ])
+                ]
                 
-                response = chat_session.send_message(pesan_final)
-                reply = response.text
+                chat = model.start_chat(history=chat_history_formatted)
+                response = chat.send_message(full_prompt)
                 
-                st.markdown(reply)
-                db.simpan_chat(nama_proyek, selected_gem, "assistant", reply)
+                st.markdown(response.text)
+                db.simpan_chat(nama_proyek, selected_gem, "assistant", response.text)
                 
             except Exception as e:
-                st.error(f"Error AI: {e}")
+                st.error(f"Error Generasi: {e}")
