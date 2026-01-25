@@ -34,7 +34,43 @@ if not api_key:
 
 genai.configure(api_key=api_key)
 
-# --- 2. DEFINISI OTAK GEMS (FINAL: SESUAI SCREENSHOT) ---
+# --- 2. AUTO-DETECT MODEL (VERSI FILTER KUOTA BESAR) ---
+@st.cache_resource
+def get_working_model():
+    try:
+        # 1. Minta daftar semua model yang tersedia di akun ini
+        all_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        
+        # 2. CARI YANG KUOTANYA BESAR (Flash 1.5)
+        # Kita cari yang ada kata 'flash' TAPI JANGAN yang '2.0' atau '2.5' atau 'exp' (experimental)
+        safe_flash = None
+        for m in all_models:
+            if "flash" in m and "1.5" in m:
+                safe_flash = m
+                break # Ketemu! Langsung ambil.
+        
+        if safe_flash:
+            return safe_flash, None
+            
+        # 3. Kalau 1.5 gak ada, cari Gemini Pro (Versi 1.0 Stabil)
+        for m in all_models:
+            if "gemini-pro" in m and "vision" not in m:
+                return m, None
+                
+        # 4. Kalau kepepet, ambil flash apa saja (meski 2.5)
+        for m in all_models:
+            if "flash" in m: return m, None
+            
+        return None, "Tidak ditemukan model yang cocok. Coba ganti API Key."
+        
+    except Exception as e: return None, str(e)
+
+model_name_fix, error_msg = get_working_model()
+if error_msg: 
+    # Fallback terakhir banget kalau API error
+    model_name_fix = "gemini-pro"
+
+# --- 3. DEFINISI OTAK GEMS (FINAL: SESUAI SCREENSHOT) ---
 gems_persona = {
     # === A. MANAJEMEN & LEAD ===
     "👔 Project Manager (PM)": "Kamu Senior Engineering Manager. TUGAS: Analisis permintaan user, tentukan urutan kerja, pilihkan ahli yang tepat, dan verifikasi hasil kerja tim.",
@@ -79,8 +115,8 @@ gems_persona = {
 # --- 4. UI SIDEBAR ---
 with st.sidebar:
     st.title("🏗️ ENGINEX")
-    # Tampilkan model yang dipaksa
-    st.caption(f"Status AI: ✅ Terhubung\nModel: `gemini-1.5-flash`") 
+    # Tampilkan model yang TERPILIH (Auto-Detect)
+    st.caption(f"Status AI: ✅ Terhubung\nModel: `{model_name_fix}`") 
     st.divider()
     
     # === SAVE & RESTORE ===
@@ -131,13 +167,8 @@ if prompt := st.chat_input("Ketik pesan..."):
     with st.chat_message("assistant"):
         with st.spinner(f"{selected_gem} berpikir..."):
             try:
-                # --- STRATEGI ANTI-LIMIT ---
-                # 1. Coba pakai Flash (Kuota Besar)
-                try:
-                    model = genai.GenerativeModel("gemini-1.5-flash")
-                except:
-                    # 2. Kalau gagal, coba Pro (Cadangan)
-                    model = genai.GenerativeModel("gemini-pro")
+                # INSTANSIASI MODEL DARI HASIL DETEKSI (model_name_fix)
+                model = genai.GenerativeModel(model_name_fix)
                 
                 full_prompt = f"PERAN: {gems_persona[selected_gem]}\nUSER: {prompt}"
                 
@@ -152,6 +183,6 @@ if prompt := st.chat_input("Ketik pesan..."):
             except Exception as e:
                 err_msg = str(e)
                 if "429" in err_msg:
-                    st.error("⚠️ Kuota API Key Habis Hari Ini. Mohon GANTI API KEY Baru di Sidebar.")
+                    st.error("⚠️ Kuota Habis. Silakan GANTI API KEY di Sidebar.")
                 else:
                     st.error(f"Error Generasi: {e}")
