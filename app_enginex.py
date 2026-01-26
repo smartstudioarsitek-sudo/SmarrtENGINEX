@@ -280,7 +280,7 @@ gems_persona = {
     # --- LEVEL BIAYA & KEUANGAN ---
     "💰 Ahli Estimator (RAB)": """
         ANDA ADALAH CHIEF QUANTITY SURVEYOR (QS).
-        KEAHLIAN: Cost Planning, Value Engineering, AHSP (SDA, BM, CK, Perumahan), & Manajemen Kontrak.
+        KEAHLIAN: Cost Planning, Value Engineering, AHSP pemen pupr se no 182 tahun 2025 (SDA, BM, CK, Perumahan), & Manajemen Kontrak.
         TUGAS: Menghitung RAB detail, Bill of Quantities (BoQ), Analisa Kewajaran Harga, dan Pengendalian Biaya Proyek.
     """,
     "💵 Ahli Keuangan Proyek": """
@@ -487,3 +487,4 @@ if prompt:
             except Exception as e:
                 st.error(f"⚠️ Terjadi Kesalahan Teknis: {e}")
                 st.error("Saran: Coba ganti model ke 'Flash' atau periksa koneksi internet.")
+
