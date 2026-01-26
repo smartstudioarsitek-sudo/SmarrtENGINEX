@@ -26,6 +26,10 @@ except ImportError:
 st.markdown("""
 <style>
     .main-header {font-size: 30px; font-weight: bold; color: #1E3A8A; margin-bottom: 10px;}
+    /* Sedikit trik biar sidebar lebih rapi */
+    [data-testid="stSidebar"] {
+        background-color: #f8f9fa;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -33,6 +37,21 @@ st.markdown("""
 with st.sidebar:
     st.title("🏗️ ENGINEX")
     
+    # === FITUR UPLOAD PINDAH KE SINI (AGAR SELALU ADA) ===
+    st.markdown("### 📂 Upload Data Proyek")
+    uploaded_files = st.file_uploader(
+        "Upload File (Gambar/PDF/Excel/Word):", 
+        type=["png", "jpg", "jpeg", "pdf", "docx", "xlsx", "pptx", "zip", "dwg"], 
+        accept_multiple_files=True,
+        help="File akan dianalisis oleh AI bersamaan dengan pertanyaan Anda."
+    )
+    
+    if uploaded_files:
+        st.success(f"✅ {len(uploaded_files)} File siap dianalisis!")
+    
+    st.divider()
+    
+    # Input Key
     api_key_input = st.text_input("🔑 API Key:", type="password")
     if api_key_input:
         raw_key = api_key_input
@@ -123,7 +142,7 @@ def process_uploaded_file(uploaded_file):
             
     return "error", "Format file tidak didukung."
 
-# --- 4. DEFINISI OTAK GEMS (26 AHLI - TETAP LENGKAP) ---
+# --- 4. DEFINISI OTAK GEMS (26 AHLI) ---
 gems_persona = {
     # === A. MANAJEMEN & LEAD ===
     "👔 Project Manager (PM)": "Kamu Senior Engineering Manager. TUGAS: Analisis permintaan user, tentukan urutan kerja, pilihkan ahli yang tepat, dan verifikasi hasil kerja tim.",
@@ -215,7 +234,7 @@ with st.sidebar:
         db.clear_chat(nama_proyek, selected_gem)
         st.rerun()
 
-# --- 6. AREA CHAT & UPLOAD (MULTI-FILE SUPPORT) ---
+# --- 6. AREA CHAT ---
 st.markdown(f'<div class="main-header">{nama_proyek}</div>', unsafe_allow_html=True)
 st.caption(f"Diskusi dengan: **{selected_gem}**")
 
@@ -224,20 +243,9 @@ for chat in history:
     with st.chat_message(chat['role']):
         st.markdown(chat['content'])
 
-# --- INPUT AREA (FILE + TEKS) ---
-col1, col2 = st.columns([1, 4])
-
-with col1:
-    # FITUR UPLOAD BANYAK FILE (accept_multiple_files=True)
-    uploaded_files = st.file_uploader(
-        "📎 Upload Banyak File", 
-        type=["png", "jpg", "jpeg", "pdf", "docx", "xlsx", "pptx", "zip", "dwg"], 
-        accept_multiple_files=True, # INI PENTING
-        label_visibility="collapsed"
-    )
-
-with col2:
-    prompt = st.chat_input("Ketik pesan konsultasi...")
+# --- CHAT INPUT (OTOMATIS DI BAWAH) ---
+# Tidak perlu pakai col1/col2 lagi karena upload sudah di Sidebar
+prompt = st.chat_input("Ketik pesan konsultasi...")
 
 if prompt:
     db.simpan_chat(nama_proyek, selected_gem, "user", prompt)
@@ -246,10 +254,10 @@ if prompt:
         
     content_to_send = [prompt]
     
-    # PROSES BANYAK FILE
+    # PROSES FILE DARI SIDEBAR
     if uploaded_files:
         with st.chat_message("user"):
-            st.write("📂 **Lampiran File:**")
+            st.write("📂 **Lampiran File (Dari Sidebar):**")
             
             for upl_file in uploaded_files:
                 file_type, file_content = process_uploaded_file(upl_file)
@@ -264,14 +272,13 @@ if prompt:
                     st.error(f"❌ {upl_file.name}: {file_content}")
 
     with st.chat_message("assistant"):
-        with st.spinner(f"{selected_gem} sedang menganalisis {len(uploaded_files)} file..."):
+        with st.spinner(f"{selected_gem} sedang menganalisis..."):
             try:
                 model = genai.GenerativeModel(selected_model_name)
                 sys_prompt = f"PERAN: {gems_persona[selected_gem]}"
                 
                 chat_history_formatted = [{"role": "user" if h['role']=="user" else "model", "parts": [h['content']]} for h in history]
                 
-                # Inject System Prompt kalau pakai model Pro (biar ingat peran)
                 if "gemini-pro" in selected_model_name and "1.5" not in selected_model_name:
                      content_to_send[0] = sys_prompt + "\n\n" + content_to_send[0]
 
@@ -287,4 +294,3 @@ if prompt:
                     st.error(f"⚠️ Limit Kuota Habis. Ganti model di Sidebar.")
                 else:
                     st.error(f"Error Generasi: {e}")
-
