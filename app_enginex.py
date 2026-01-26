@@ -123,7 +123,7 @@ def process_uploaded_file(uploaded_file):
             
     return "error", "Format file tidak didukung."
 
-# --- 4. DEFINISI OTAK GEMS (26 AHLI - LENGKAP & CERDAS) ---
+# --- 4. DEFINISI OTAK GEMS (26 AHLI - TETAP LENGKAP) ---
 gems_persona = {
     # === A. MANAJEMEN & LEAD ===
     "👔 Project Manager (PM)": "Kamu Senior Engineering Manager. TUGAS: Analisis permintaan user, tentukan urutan kerja, pilihkan ahli yang tepat, dan verifikasi hasil kerja tim.",
@@ -153,27 +153,9 @@ gems_persona = {
     "🏛️ Senior Architect": """
         Kamu Arsitek Senior.
         TUGAS GAMBAR: Jika user upload Denah/Tampak, kritik dari segi Fungsi Ruang, Sirkulasi, Pencahayaan, dan Estetika.
-        1. Membaca Denah (Floor Plan)
-        AI bisa memahami Logika Ruang dan Sirkulasi.
-        Apa yang bisa dia lakukan:
-        Mendeteksi nama ruangan (Kamar Tidur, WC, Dapur).
-        Menganalisis sirkulasi: "Kak, posisi pintu WC ini langsung menghadap ruang tamu, secara etika kurang sopan."
-        Menghitung estimasi luas (jika ada dimensi yang terbaca jelas).
-        Memberi saran layout: "Dapur terlalu jauh dari ruang makan, sebaiknya ditukar dengan posisi gudang."
-        2. Membaca Tampak (Elevation)
-        AI bisa memahami Estetika dan Gaya Arsitektur.
-        Apa yang bisa dia lakukan:
-        Mengenali gaya bangunan: "Ini gaya Minimalis Tropis."
-        Memberi saran material: "Fasad ini akan lebih cantik kalau area kotak yang menonjol itu diberi aksen batu alam andesit."
-        Melihat proporsi: "Jendelanya terlihat terlalu kecil untuk dinding seluas itu."
-        3. Membaca Potongan (Section) & Detail
-        AI sangat jago membaca Keterangan Teks (Notasi) yang ada di gambar detail.
-        Apa yang bisa dia lakukan:
-        Membaca lapisan bangunan: "Saya lihat di gambar potongan ini menggunakan pondasi batu kali, bukan footplate."
-        Mengecek kelengkapan: "Di detail kuda-kuda ini, belum ada keterangan ukuran baut yang digunakan."
-        Cross-check spesifikasi: "Di gambar tertulis besi diameter 10mm, tapi untuk bentang segini menurut SNI sebaiknya minimal 12mm." (Ini kalau Kakak tanya ke Ahli Struktur).
-        
-        Fokus: Konsep Desain, Material, Estetika Tropis. bisa berkoordinasi dengan ahli yg lain
+        1. Membaca Denah: Deteksi nama ruangan, sirkulasi, luas.
+        2. Membaca Tampak: Gaya bangunan, material, proporsi.
+        Fokus: Konsep Desain, Material, Estetika Tropis.
     """,
     "🌳 Landscape Architect": "Fokus: Taman, Hardscape, Softscape, Resapan Air RTH.",
     "🎨 Creative Director ArchViz": "Ahli 3D Render (Lumion/D5). Jika user upload sketsa tangan, buatkan prompt AI untuk merender gambar tersebut jadi realistis.",
@@ -182,43 +164,23 @@ gems_persona = {
     # === F. INDUSTRI & LINGKUNGAN ===
     "🏭 Ahli Proses Industri (Kimia)": "Fokus: Pipa Industri, Pengolahan Minyak/Gas, Proses Pabrik (Chemical Eng).",
     "📜 Ahli AMDAL & Lingkungan": "Fokus: Dokumen AMDAL/UKL-UPL, Dampak Sosial & Biologi.",
-    "♻️ Ahli Teknik Lingkungan (Sanitary)": "Fokus: IPAL (Limbah), Persampahan (TPA), Air Bersih (WTP), Plumbing,SPAM, JIAT.",
+    "♻️ Ahli Teknik Lingkungan (Sanitary)": "Fokus: IPAL (Limbah), Persampahan (TPA), Air Bersih (WTP), Plumbing, SPAM, JIAT.",
     "⛑️ Ahli K3 Konstruksi": "Fokus: SMKK, Identifikasi Bahaya (IBPRP). Jika user upload foto lokasi proyek, deteksi potensi bahaya (unsafe condition) di foto itu.",
 
     # === G. DIGITAL & SOFTWARE ===
     "💻 Lead Engineering Developer": "Programmer Python/Streamlit. Menerjemahkan rumus teknik jadi kode aplikasi.",
     "📐 CAD & BIM Automator": "Penulis Script AutoLISP & Dynamo untuk otomatisasi gambar CAD/Revit.",
-    "🖥️ Instruktur Software": "Guru SEMUA Software (Revit, Civil 3D, HEC-RAS, GIS, PLANSWIFT DAN SOFTWARE LAINNYA). YG SANGAT PINTAR DALAM MATERI DAN MENYAMPAIKAN, WAJIB: Kasih Link Youtube Tutorial.",
+    "🖥️ Instruktur Software": "Guru SEMUA Software (Revit, Civil 3D, HEC-RAS, GIS, PLANSWIFT). SANGAT PINTAR MENYAMPAIKAN. WAJIB: Kasih Link Youtube Tutorial.",
 
     # === H. BIAYA & KEUANGAN ===
     "💰 Ahli Estimator (RAB)": """
         Kamu Quantity Surveyor (QS) Senior.
-        TUGAS UTAMA: Menghitung Volume (Take Off Sheet) dan RAB, paham dan bisa membuat ahsp sesuai permem pupr no 182 tahun 2025 untuk 3 bidang pekerjaan,bidang cipta karya(ck), bidang sumber daya air (sda) dan bidang bina marga (bm)
-
-        1. Membaca Denah (Floor Plan)
-        AI bisa memahami Logika Ruang dan Sirkulasi.
-        Apa yang bisa dia lakukan:
-        Mendeteksi nama ruangan (Kamar Tidur, WC, Dapur).
-        Menganalisis sirkulasi: "Kak, posisi pintu WC ini langsung menghadap ruang tamu, secara etika kurang sopan."
-        Menghitung estimasi luas (jika ada dimensi yang terbaca jelas).
-        Memberi saran layout: "Dapur terlalu jauh dari ruang makan, sebaiknya ditukar dengan posisi gudang."
-        2. Membaca Tampak (Elevation)
-        AI bisa memahami Estetika dan Gaya Arsitektur.
-        Apa yang bisa dia lakukan:
-        Mengenali gaya bangunan: "Ini gaya Minimalis Tropis."
-        Memberi saran material: "Fasad ini akan lebih cantik kalau area kotak yang menonjol itu diberi aksen batu alam andesit."
-        Melihat proporsi: "Jendelanya terlihat terlalu kecil untuk dinding seluas itu."
-        3. Membaca Potongan (Section) & Detail
-        AI sangat jago membaca Keterangan Teks (Notasi) yang ada di gambar detail.
-        Apa yang bisa dia lakukan:
-        Membaca lapisan bangunan: "Saya lihat di gambar potongan ini menggunakan pondasi batu kali, bukan footplate."
-        Mengecek kelengkapan: "Di detail kuda-kuda ini, belum ada keterangan ukuran baut yang digunakan."
-        Cross-check spesifikasi: "Di gambar tertulis besi diameter 10mm, tapi untuk bentang segini menurut SNI sebaiknya minimal 12mm." (Ini kalau Kakak tanya ke Ahli Struktur).
-        JIKA USER UPLOAD GAMBAR KERJA (Denah/Detail): 
-        1. Identifikasi elemen (Dinding, Kolom, Pondasi dan lainnya).
-        2. Cari angka dimensi di gambar untuk menghitung Volume (m1,m2,m3).
-        3. Jika dimensi tidak terbaca, minta klarifikasi user atau gunakan asumsi standar (misal tinggi dinding 4m).
-        4. Susun hasil dalam Tabel BOQ (No, Uraian, Satuan, Vol, Harga, Total) sesuai ahsp permintaan user dan harga satuan upah , bahan dan peralatan yg di upload (input) user.
+        TUGAS UTAMA: Menghitung Volume (Take Off Sheet) dan RAB. Paham AHSP Permen PUPR No 1 (CK, SDA, BM).
+        JIKA USER UPLOAD GAMBAR/FILE:
+        1. Identifikasi elemen dari gambar (Dinding, Kolom, Pondasi).
+        2. Cari dimensi untuk hitung volume.
+        3. Jika dimensi tidak terbaca, gunakan asumsi standar (misal tinggi dinding 3.5m).
+        4. Susun tabel BOQ sesuai AHSP.
     """,
     "💵 Ahli Keuangan Proyek": "Fokus: Cashflow, Pajak (PPN/PPh), ROI, Laporan Keuangan.",
     "📜 Ahli Perizinan (IMB/PBG)": "Fokus: Pengurusan PBG, SLF, KRK, Advice Planning."
@@ -253,7 +215,7 @@ with st.sidebar:
         db.clear_chat(nama_proyek, selected_gem)
         st.rerun()
 
-# --- 6. AREA CHAT & UPLOAD ---
+# --- 6. AREA CHAT & UPLOAD (MULTI-FILE SUPPORT) ---
 st.markdown(f'<div class="main-header">{nama_proyek}</div>', unsafe_allow_html=True)
 st.caption(f"Diskusi dengan: **{selected_gem}**")
 
@@ -266,9 +228,11 @@ for chat in history:
 col1, col2 = st.columns([1, 4])
 
 with col1:
-    uploaded_file = st.file_uploader(
-        "📎 Upload", 
+    # FITUR UPLOAD BANYAK FILE (accept_multiple_files=True)
+    uploaded_files = st.file_uploader(
+        "📎 Upload Banyak File", 
         type=["png", "jpg", "jpeg", "pdf", "docx", "xlsx", "pptx", "zip", "dwg"], 
+        accept_multiple_files=True, # INI PENTING
         label_visibility="collapsed"
     )
 
@@ -282,32 +246,32 @@ if prompt:
         
     content_to_send = [prompt]
     
-    if uploaded_file:
-        file_type, file_content = process_uploaded_file(uploaded_file)
-        
-        if file_type == "image":
-            with st.chat_message("user"):
-                st.image(uploaded_file, caption="Lampiran Gambar", use_container_width=True)
-            content_to_send.append(file_content)
+    # PROSES BANYAK FILE
+    if uploaded_files:
+        with st.chat_message("user"):
+            st.write("📂 **Lampiran File:**")
             
-        elif file_type == "text":
-            nama_file = uploaded_file.name
-            content_to_send[0] += f"\n\n[DATA FILE '{nama_file}']:\n{file_content}\n[AKHIR DATA]"
-            with st.chat_message("user"):
-                st.info(f"📄 File Terlampir: {nama_file}")
-            
-        elif file_type == "error":
-            st.error(file_content)
+            for upl_file in uploaded_files:
+                file_type, file_content = process_uploaded_file(upl_file)
+                
+                if file_type == "image":
+                    st.image(upl_file, caption=upl_file.name, width=200)
+                    content_to_send.append(file_content)
+                elif file_type == "text":
+                    st.caption(f"📄 {upl_file.name} (Teks Terbaca)")
+                    content_to_send[0] += f"\n\n=== FILE: {upl_file.name} ===\n{file_content}\n=== END FILE ===\n"
+                elif file_type == "error":
+                    st.error(f"❌ {upl_file.name}: {file_content}")
 
     with st.chat_message("assistant"):
-        with st.spinner(f"{selected_gem} sedang menganalisis..."):
+        with st.spinner(f"{selected_gem} sedang menganalisis {len(uploaded_files)} file..."):
             try:
                 model = genai.GenerativeModel(selected_model_name)
                 sys_prompt = f"PERAN: {gems_persona[selected_gem]}"
                 
                 chat_history_formatted = [{"role": "user" if h['role']=="user" else "model", "parts": [h['content']]} for h in history]
                 
-                # System prompt injection (untuk Pro model agar tidak lupa peran)
+                # Inject System Prompt kalau pakai model Pro (biar ingat peran)
                 if "gemini-pro" in selected_model_name and "1.5" not in selected_model_name:
                      content_to_send[0] = sys_prompt + "\n\n" + content_to_send[0]
 
