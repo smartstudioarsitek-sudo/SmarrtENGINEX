@@ -21,6 +21,10 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# --- INIT SESSION STATE (MEMORI FILE) ---
+if 'processed_files' not in st.session_state:
+    st.session_state.processed_files = set()
+
 # ==========================================
 # 1. SETUP API KEY & MODEL (DI SIDEBAR ATAS)
 # ==========================================
@@ -274,18 +278,19 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("### 📂 Serahkan Data (Upload)")
     uploaded_files = st.file_uploader(
-        "Lampirkan File (Gambar, PDF, Excel, Peta):", 
+        "Lampirkan File (Gambar/PDF/Excel/Peta):", 
         type=["png", "jpg", "jpeg", "pdf", "docx", "xlsx", "pptx", "zip", "dwg", "kml", "kmz", "geojson"], 
         accept_multiple_files=True,
-        help="Data ini akan dibaca oleh Ahli yang Anda pilih di atas."
+        help="AI akan mengingat file ini selama sesi berlangsung."
     )
     
     if uploaded_files:
-        st.info(f"📎 {len(uploaded_files)} File Terlampir")
+        st.info(f"📎 {len(uploaded_files)} File di Uploader")
     
     st.divider()
-    if st.button("🧹 Bersihkan Chat"):
+    if st.button("🧹 Bersihkan Chat & Memori"):
         db.clear_chat(nama_proyek, selected_gem)
+        st.session_state.processed_files.clear() # Reset Memori File
         st.rerun()
 
 # ==========================================
@@ -365,21 +370,42 @@ if prompt:
     # 2. Siapkan Konteks (Prompt + File)
     content_to_send = [prompt]
     
-    # Cek apakah ada file di Sidebar
+    # --- LOGIKA CERDAS: CEK MEMORI FILE ---
     if uploaded_files:
-        with st.chat_message("user"):
-            st.write("📂 **Mengirim Data Lampiran...**")
-            for upl_file in uploaded_files:
+        new_files_detected = False
+        
+        for upl_file in uploaded_files:
+            # Cek apakah file ini SUDAH pernah diproses di sesi ini?
+            if upl_file.name not in st.session_state.processed_files:
+                
+                # JIKA BELUM, PROSES SEKARANG
                 ftype, fcontent = process_uploaded_file(upl_file)
                 
                 if ftype == "image":
-                    st.image(upl_file, width=200)
+                    with st.chat_message("user"):
+                        st.image(upl_file, width=200, caption=f"Mengirim {upl_file.name}...")
                     content_to_send.append(fcontent)
+                    st.session_state.processed_files.add(upl_file.name) # Tandai sudah dibaca
+                    new_files_detected = True
+                    
                 elif ftype == "text":
-                    st.caption(f"📄 Membaca: {upl_file.name}")
-                    content_to_send[0] += f"\n\n=== FILE: {upl_file.name} ===\n{fcontent}\n=== END ===\n"
+                    with st.chat_message("user"):
+                        st.caption(f"📄 Membaca dokumen baru: {upl_file.name}")
+                    content_to_send[0] += f"\n\n=== FILE BARU: {upl_file.name} ===\n{fcontent}\n=== END FILE ===\n"
+                    st.session_state.processed_files.add(upl_file.name) # Tandai sudah dibaca
+                    new_files_detected = True
+                    
                 elif ftype == "error":
                     st.error(f"❌ {upl_file.name}: {fcontent}")
+            
+            else:
+                # JIKA SUDAH, ABAIKAN (BIAR TIDAK DOUBLE)
+                # AI sudah punya datanya di History Chat sebelumnya
+                pass
+        
+        if not new_files_detected:
+            # Info kecil bahwa file lama masih ada
+            st.caption("ℹ️ Menggunakan file yang sudah diupload sebelumnya (Memori).")
 
     # 3. Generate Jawaban AI
     with st.chat_message("assistant"):
