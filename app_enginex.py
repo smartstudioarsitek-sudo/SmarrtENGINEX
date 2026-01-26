@@ -1,5 +1,6 @@
 import streamlit as st
 import google.generativeai as genai
+from google.generativeai.types import HarmCategory, HarmBlockThreshold
 import pandas as pd
 import json
 from PIL import Image
@@ -18,6 +19,9 @@ st.markdown("""
     .main-header {font-size: 30px; font-weight: bold; color: #1E3A8A; margin-bottom: 10px;}
     [data-testid="stSidebar"] {background-color: #f8f9fa;}
     .stChatInput textarea {font-size: 16px !important;}
+    
+    /* Efek Avatar */
+    .stChatMessage .avatar {background-color: #1E3A8A; color: white;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -29,18 +33,19 @@ if 'processed_files' not in st.session_state:
 # 1. SETUP API KEY & MODEL (DI SIDEBAR ATAS)
 # ==========================================
 with st.sidebar:
-    st.title("🏗️ ENGINEX")
+    st.title("🏗️ ENGINEX PRO")
+    st.caption("Advanced Civil Engineering AI")
     
     # Input API Key
     api_key_input = st.text_input("🔑 API Key:", type="password")
     if api_key_input:
         raw_key = api_key_input
-        st.caption("ℹ️ Key Manual")
+        st.caption("ℹ️ Key Manual Digunakan")
     else:
         raw_key = st.secrets.get("GOOGLE_API_KEY")
     
     if not raw_key:
-        st.warning("⚠️ Masukkan API Key.")
+        st.warning("⚠️ Masukkan API Key Google AI Studio.")
         st.stop()
         
     clean_api_key = raw_key.strip()
@@ -59,6 +64,8 @@ def get_available_models_from_google(api_key_trigger):
         for m in genai.list_models():
             if 'generateContent' in m.supported_generation_methods:
                 model_list.append(m.name)
+        # Urutkan agar model terbaru/pro ada di atas
+        model_list.sort(key=lambda x: 'pro' not in x) 
         return model_list, None
     except Exception as e:
         return [], str(e)
@@ -70,16 +77,25 @@ with st.sidebar:
     if error_msg: st.error(f"❌ Error: {error_msg}"); st.stop()
     if not real_models: st.warning("⚠️ Tidak ada model."); st.stop()
 
+    # Auto-select model terbaik (Gemini 3 atau 1.5 Pro)
     default_idx = 0
     for i, m in enumerate(real_models):
-        if "gemini-1.5-flash" in m: default_idx = i; break
+        if "gemini-1.5-pro" in m or "gemini-3" in m: 
+            default_idx = i
+            break
             
     selected_model_name = st.selectbox(
-        "🤖 Pilih Model AI:", 
+        "🧠 Pilih Otak AI:", 
         real_models,
         index=default_idx
     )
-    st.caption(f"Status: ✅ Terhubung")
+    
+    # Indikator Status
+    if "pro" in selected_model_name or "ultra" in selected_model_name:
+        st.success(f"⚡ Mode: HIGH REASONING (Smart)")
+    else:
+        st.info(f"🚀 Mode: HIGH SPEED (Fast)")
+        
     st.divider()
 
 # --- KONEKSI DATABASE LOKAL ---
@@ -89,16 +105,16 @@ try:
         st.session_state.backend = EnginexBackend()
     db = st.session_state.backend
 except ImportError:
-    st.error("⚠️ File 'backend_enginex.py' belum ada!")
+    st.error("⚠️ File 'backend_enginex.py' belum ada! Pastikan file backend satu folder.")
     st.stop()
 
 # ==========================================
 # 2. SAVE/LOAD & PROYEK (SIDEBAR TENGAH)
 # ==========================================
 with st.sidebar:
-    with st.expander("💾 Save & Open Project"):
-        st.download_button("⬇️ Download JSON", db.export_data(), "enginex_data.json", mime="application/json")
-        uploaded_restore = st.file_uploader("⬆️ Restore JSON", type=["json"])
+    with st.expander("💾 Manajemen Data (Save/Load)"):
+        st.download_button("⬇️ Download Backup JSON", db.export_data(), "enginex_backup.json", mime="application/json")
+        uploaded_restore = st.file_uploader("⬆️ Restore Backup", type=["json"])
         if uploaded_restore and st.button("Proses Restore"):
             ok, msg = db.import_data(uploaded_restore)
             if ok: st.success(msg); st.rerun()
@@ -108,17 +124,17 @@ with st.sidebar:
     
     # Pilih Proyek
     existing_projects = db.daftar_proyek()
-    mode_proyek = st.radio("Mode:", ["Proyek Baru", "Buka Lama"], horizontal=True)
+    mode_proyek = st.radio("Folder Proyek:", ["Proyek Baru", "Buka Lama"], horizontal=True)
     
     if mode_proyek == "Proyek Baru":
-        nama_proyek = st.text_input("Nama Proyek:", "Proyek Baru")
+        nama_proyek = st.text_input("Nama Proyek:", "DED Irigasi 2026")
     else:
         nama_proyek = st.selectbox("Pilih Proyek:", existing_projects) if existing_projects else "Belum ada"
     
     st.divider()
 
 # ==========================================
-# 3. DEFINISI OTAK GEMS (26 AHLI - GRADE TERTINGGI/EXPERT)
+# 3. DEFINISI OTAK GEMS (26 AHLI)
 # ==========================================
 gems_persona = {
     # --- LEVEL DIREKSI & MANAJEMEN ---
@@ -300,7 +316,7 @@ with st.sidebar:
         st.info(f"📎 {len(uploaded_files)} File di Uploader")
     
     st.divider()
-    if st.button("🧹 Bersihkan Chat & Memori"):
+    if st.button("🧹 Reset/Bersihkan Chat"):
         db.clear_chat(nama_proyek, selected_gem)
         st.session_state.processed_files.clear() # Reset Memori File
         st.rerun()
@@ -362,9 +378,11 @@ def process_uploaded_file(uploaded_file):
 # 6. AREA CHAT UTAMA
 # ==========================================
 st.markdown(f'<div class="main-header">{nama_proyek}</div>', unsafe_allow_html=True)
-st.caption(f"Diskusi dengan: **{selected_gem}**")
 
-# History
+# Header Personalisasi
+st.caption(f"Status: **Connected** | Expert: **{selected_gem}**")
+
+# History Chat
 history = db.get_chat_history(nama_proyek, selected_gem)
 for chat in history:
     with st.chat_message(chat['role']):
@@ -374,7 +392,7 @@ for chat in history:
 prompt = st.chat_input(f"Tanya sesuatu ke {selected_gem}...")
 
 if prompt:
-    # 1. Simpan User
+    # 1. Simpan Prompt User
     db.simpan_chat(nama_proyek, selected_gem, "user", prompt)
     with st.chat_message("user"):
         st.markdown(prompt)
@@ -390,56 +408,82 @@ if prompt:
             # Cek apakah file ini SUDAH pernah diproses di sesi ini?
             if upl_file.name not in st.session_state.processed_files:
                 
-                # JIKA BELUM, PROSES SEKARANG
                 ftype, fcontent = process_uploaded_file(upl_file)
                 
                 if ftype == "image":
                     with st.chat_message("user"):
-                        st.image(upl_file, width=200, caption=f"Mengirim {upl_file.name}...")
+                        st.image(upl_file, width=200, caption=f"Kirim: {upl_file.name}")
                     content_to_send.append(fcontent)
-                    st.session_state.processed_files.add(upl_file.name) # Tandai sudah dibaca
+                    st.session_state.processed_files.add(upl_file.name)
                     new_files_detected = True
                     
                 elif ftype == "text":
                     with st.chat_message("user"):
-                        st.caption(f"📄 Membaca dokumen baru: {upl_file.name}")
-                    content_to_send[0] += f"\n\n=== FILE BARU: {upl_file.name} ===\n{fcontent}\n=== END FILE ===\n"
-                    st.session_state.processed_files.add(upl_file.name) # Tandai sudah dibaca
+                        st.caption(f"📄 Baca data: {upl_file.name}")
+                    # Beri label jelas ke AI bahwa ini adalah isi file
+                    file_text_wrapped = f"\n\n--- [START DATA FILE: {upl_file.name}] ---\n{fcontent}\n--- [END DATA FILE] ---\n"
+                    content_to_send[0] += file_text_wrapped
+                    st.session_state.processed_files.add(upl_file.name)
                     new_files_detected = True
                     
                 elif ftype == "error":
                     st.error(f"❌ {upl_file.name}: {fcontent}")
             
-            else:
-                # JIKA SUDAH, ABAIKAN (BIAR TIDAK DOUBLE)
-                # AI sudah punya datanya di History Chat sebelumnya
-                pass
-        
         if not new_files_detected:
-            # Info kecil bahwa file lama masih ada
-            st.caption("ℹ️ Menggunakan file yang sudah diupload sebelumnya (Memori).")
+            # Info kecil bahwa file lama masih ada di memori
+            # Tidak perlu diprint agar UI bersih
+            pass
 
-    # 3. Generate Jawaban AI
+    # 3. Generate Jawaban AI (THE UPGRADED BRAIN)
     with st.chat_message("assistant"):
-        with st.spinner("Sedang berpikir..."):
+        # Dynamic spinner text
+        with st.spinner(f"{selected_gem.split(' ')[1]} sedang berpikir & menghitung..."):
             try:
-                model = genai.GenerativeModel(selected_model_name)
+                # --- [UPGRADE 1]: SAFETY SETTINGS UNLOCK ---
+                # Mengizinkan konten teknis berbahaya (misal: diskusi ledakan tambang/bendungan)
+                safety_settings_engineering = {
+                    HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
+                    HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
+                    HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+                    HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+                }
+
+                # --- [UPGRADE 2]: NATIVE SYSTEM INSTRUCTION ---
+                # Instruksi ditanam langsung di otak, bukan ditempel di chat. Lebih kuat & konsisten.
+                model = genai.GenerativeModel(
+                    model_name=selected_model_name,
+                    system_instruction=gems_persona[selected_gem], 
+                    safety_settings=safety_settings_engineering
+                )
                 
-                # System Prompt Injection (Agar tidak lupa peran EXPERT)
-                sys_prompt = f"PERAN ANDA: {gems_persona[selected_gem]}"
+                # Format History untuk API Google (Strict User/Model role)
+                hist_formatted = []
+                for h in history:
+                    role_api = "user" if h['role']=="user" else "model"
+                    hist_formatted.append({"role": role_api, "parts": [h['content']]})
                 
-                # Tambahkan instruksi ini ke pesan pertama atau system prompt
-                if "gemini-pro" in selected_model_name:
-                    content_to_send[0] = sys_prompt + "\n\n" + content_to_send[0]
+                # Mulai Chat
+                chat_session = model.start_chat(history=hist_formatted)
                 
-                # History Formatting
-                hist_formatted = [{"role": "user" if h['role']=="user" else "model", "parts": [h['content']]} for h in history]
+                # --- [UPGRADE 3]: STREAMING RESPONSE ---
+                # Efek mengetik agar tidak terlihat 'lag'
+                response_stream = chat_session.send_message(content_to_send, stream=True)
                 
-                chat = model.start_chat(history=hist_formatted)
-                response = chat.send_message(content_to_send)
+                full_response_text = ""
+                placeholder = st.empty()
                 
-                st.markdown(response.text)
-                db.simpan_chat(nama_proyek, selected_gem, "assistant", response.text)
+                for chunk in response_stream:
+                    if chunk.text:
+                        full_response_text += chunk.text
+                        # Update teks real-time
+                        placeholder.markdown(full_response_text + "▌")
+                
+                # Final render tanpa kursor
+                placeholder.markdown(full_response_text)
+                
+                # Simpan ke Database
+                db.simpan_chat(nama_proyek, selected_gem, "assistant", full_response_text)
                 
             except Exception as e:
-                st.error(f"Error: {e}")
+                st.error(f"⚠️ Terjadi Kesalahan Teknis: {e}")
+                st.error("Saran: Coba ganti model ke 'Flash' atau periksa koneksi internet.")
