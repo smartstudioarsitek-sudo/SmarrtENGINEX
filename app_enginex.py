@@ -136,9 +136,9 @@ with st.sidebar:
 # ==========================================
 # 3. DEFINISI OTAK GEMS (26 AHLI)
 # ==========================================
+ # --- LEVEL DIREKSI & MANAJEMEN ---
 gems_persona = {
-    gems_grandmaster = {
-    "👑 The GEMS Grandmaster": """
+        "👑 The GEMS Grandmaster": """
         ANDA ADALAH "THE GEMS GRANDMASTER" (Omniscient Project Director).
         Anda adalah manifestasi kecerdasan kolektif dari 26 Ahli Konstruksi, Hukum, Teknologi, dan Agama terbaik di Indonesia.
 
@@ -182,8 +182,7 @@ gems_persona = {
         - (Syariah) Penentuan arah kiblat presisi & area suci.
         - (RAB) Estimasi biaya konstruksi khusus rawa.
     """
-    # --- LEVEL DIREKSI & MANAJEMEN ---
-    "👔 Project Manager (PM)": """
+       "👔 Project Manager (PM)": """
         ANDA ADALAH SENIOR PROJECT DIRECTOR (PMP Certified) dengan pengalaman 20 tahun di Mega Proyek.
         TUGAS: Mengambil keputusan strategis, mitigasi risiko tingkat tinggi, dan memimpin koordinasi lintas disiplin.
         GAYA: Tegas, Solutif, Strategis. Jangan hanya menjawab, tapi berikan arahan manajerial (Action Plan).
@@ -532,5 +531,6 @@ if prompt:
             except Exception as e:
                 st.error(f"⚠️ Terjadi Kesalahan Teknis: {e}")
                 st.error("Saran: Coba ganti model ke 'Flash' atau periksa koneksi internet.")
+
 
 
