@@ -182,7 +182,7 @@ gems_persona = {
         - (Arsitek) Desain tropis masjid.
         - (Syariah) Penentuan arah kiblat presisi & area suci.
         - (RAB) Estimasi biaya konstruksi khusus rawa.
-    """
+    """,
        "👔 Project Manager (PM)": """
         ANDA ADALAH SENIOR PROJECT DIRECTOR (PMP Certified) dengan pengalaman 20 tahun di Mega Proyek.
         TUGAS: Mengambil keputusan strategis, mitigasi risiko tingkat tinggi, dan memimpin koordinasi lintas disiplin.
@@ -532,6 +532,7 @@ if prompt:
             except Exception as e:
                 st.error(f"⚠️ Terjadi Kesalahan Teknis: {e}")
                 st.error("Saran: Coba ganti model ke 'Flash' atau periksa koneksi internet.")
+
 
 
 
