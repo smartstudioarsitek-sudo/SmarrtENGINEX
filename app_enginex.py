@@ -77,10 +77,10 @@ with st.sidebar:
     if error_msg: st.error(f"❌ Error: {error_msg}"); st.stop()
     if not real_models: st.warning("⚠️ Tidak ada model."); st.stop()
 
-    # Auto-select model terbaik (Gemini 3 atau 1.5 Pro)
+    # Auto-select: Prioritaskan Flash biar gak kena Limit
     default_idx = 0
     for i, m in enumerate(real_models):
-        if "gemini-1.5-pro" in m or "gemini-3" in m: 
+        if "flash" in m:  # <--- Ubah ini jadi cari 'flash'
             default_idx = i
             break
             
@@ -532,6 +532,7 @@ if prompt:
             except Exception as e:
                 st.error(f"⚠️ Terjadi Kesalahan Teknis: {e}")
                 st.error("Saran: Coba ganti model ke 'Flash' atau periksa koneksi internet.")
+
 
 
 
