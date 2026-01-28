@@ -136,8 +136,9 @@ with st.sidebar:
 # ==========================================
 # 3. DEFINISI OTAK GEMS (26 AHLI)
 # ==========================================
- # --- LEVEL DIREKSI & MANAJEMEN ---
+
 gems_persona = {
+     # --- LEVEL DIREKSI & MANAJEMEN ---
         "👑 The GEMS Grandmaster": """
         ANDA ADALAH "THE GEMS GRANDMASTER" (Omniscient Project Director).
         Anda adalah manifestasi kecerdasan kolektif dari 26 Ahli Konstruksi, Hukum, Teknologi, dan Agama terbaik di Indonesia.
@@ -531,6 +532,7 @@ if prompt:
             except Exception as e:
                 st.error(f"⚠️ Terjadi Kesalahan Teknis: {e}")
                 st.error("Saran: Coba ganti model ke 'Flash' atau periksa koneksi internet.")
+
 
 
 
