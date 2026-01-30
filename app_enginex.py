@@ -9,6 +9,7 @@ import io
 import docx
 import zipfile
 from pptx import Presentation
+import re
 
 # --- KONFIGURASI HALAMAN ---
 st.set_page_config(page_title="ENGINEX Super App", page_icon="🏗️", layout="wide")
@@ -22,6 +23,13 @@ st.markdown("""
     
     /* Efek Avatar */
     .stChatMessage .avatar {background-color: #1E3A8A; color: white;}
+    
+    /* Tombol Download Custom */
+    .stDownloadButton button {
+        width: 100%;
+        border-radius: 8px;
+        font-weight: bold;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -30,11 +38,94 @@ if 'processed_files' not in st.session_state:
     st.session_state.processed_files = set()
 
 # ==========================================
+# 0. FUNGSI BANTUAN EXPORT (WORD & EXCEL)
+# ==========================================
+
+def create_docx_from_text(text_content):
+    """Mengubah teks chat menjadi file Word (.docx)"""
+    try:
+        doc = docx.Document()
+        doc.add_heading('Laporan Output ENGINEX', 0)
+        
+        # Pisahkan per baris agar rapi
+        lines = text_content.split('\n')
+        for line in lines:
+            clean_line = line.strip()
+            if clean_line.startswith('## '):
+                doc.add_heading(clean_line.replace('## ', ''), level=2)
+            elif clean_line.startswith('### '):
+                doc.add_heading(clean_line.replace('### ', ''), level=3)
+            elif clean_line.startswith('- ') or clean_line.startswith('* '):
+                doc.add_paragraph(clean_line, style='List Bullet')
+            elif clean_line:
+                doc.add_paragraph(clean_line)
+                
+        bio = io.BytesIO()
+        doc.save(bio)
+        bio.seek(0)
+        return bio
+    except Exception as e:
+        st.error(f"Gagal membuat Word: {e}")
+        return None
+
+def extract_table_to_excel(text_content):
+    """Mendeteksi tabel Markdown dalam chat dan mengubahnya ke Excel (.xlsx)"""
+    try:
+        lines = text_content.split('\n')
+        table_data = []
+        capture_mode = False
+        
+        for line in lines:
+            stripped = line.strip()
+            # Deteksi baris tabel (mengandung |)
+            if "|" in stripped:
+                # Abaikan baris pemisah markdown (---|---|---)
+                if set(stripped.replace('|', '').replace('-', '').replace(' ', '')) == set():
+                    continue
+                
+                # Bersihkan cell
+                row_cells = [c.strip() for c in stripped.split('|')]
+                
+                # Hapus elemen kosong di awal/akhir jika ada pipe di pinggir
+                if stripped.startswith('|'): row_cells = row_cells[1:]
+                if stripped.endswith('|'): row_cells = row_cells[:-1]
+                
+                if row_cells:
+                    table_data.append(row_cells)
+        
+        if len(table_data) < 2:
+            return None # Tidak ada tabel valid
+            
+        # Anggap baris pertama adalah Header
+        headers = table_data[0]
+        data_rows = table_data[1:]
+        
+        # Buat DataFrame
+        df = pd.DataFrame(data_rows, columns=headers)
+        
+        # Export ke Excel Memory
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            df.to_excel(writer, index=False, sheet_name='Data_ENGINEX')
+            
+            # Auto-adjust column width (Opsional, perlu xlsxwriter)
+            worksheet = writer.sheets['Data_ENGINEX']
+            for i, col in enumerate(df.columns):
+                worksheet.set_column(i, i, 20)
+                
+        output.seek(0)
+        return output
+        
+    except Exception as e:
+        # Jangan tampilkan error ke user agar tidak mengganggu, return None saja
+        return None
+
+# ==========================================
 # 1. SETUP API KEY & MODEL (DI SIDEBAR ATAS)
 # ==========================================
 with st.sidebar:
     st.title("🏗️ ENGINEX PRO")
-    st.caption("Advanced Civil Engineering AI")
+    st.caption("Advanced Civil Engineering AI v9.0")
     
     # Input API Key
     api_key_input = st.text_input("🔑 API Key:", type="password")
@@ -80,7 +171,7 @@ with st.sidebar:
     # Auto-select: Prioritaskan Flash biar gak kena Limit
     default_idx = 0
     for i, m in enumerate(real_models):
-        if "flash" in m:  # <--- Ubah ini jadi cari 'flash'
+        if "flash" in m:  
             default_idx = i
             break
             
@@ -134,7 +225,7 @@ with st.sidebar:
     st.divider()
 
 # ==========================================
-# 3. DEFINISI OTAK GEMS (26 AHLI)
+# 3. DEFINISI OTAK GEMS (UPGRADED: ANTI-HALUSINASI)
 # ==========================================
 
 gems_persona = {
@@ -219,7 +310,6 @@ gems_persona = {
         ANDA ADALAH SENIOR HYDRAULIC STRUCTURE ENGINEER.
         KEAHLIAN: Desain Bendung (Weir), Bendungan (Dam), Embung, & Pintu Air Otomatis.
         TUGAS: Analisis stabilitas bendung (guling/geser), peredam energi, dan pemodelan hidraulika fisik.
-
         [INSTRUKSI TAMBAHAN AGAR FLASH LEBIH PINTAR]:
         1. JANGAN ASUMSI. Gunakan hanya data yang diberikan user. Jika kurang, tanya user.
         2. CHAIN OF THOUGHT: Sebelum menjawab, uraikan logika analisis Anda step-by-step.
@@ -557,7 +647,6 @@ if prompt:
             
         if not new_files_detected:
             # Info kecil bahwa file lama masih ada di memori
-            # Tidak perlu diprint agar UI bersih
             pass
 
     # 3. Generate Jawaban AI (THE UPGRADED BRAIN)
@@ -566,7 +655,7 @@ if prompt:
         with st.spinner(f"{selected_gem.split(' ')[1]} sedang berpikir & menghitung..."):
             try:
                 # --- [UPGRADE 1]: SAFETY SETTINGS UNLOCK ---
-                # Mengizinkan konten teknis berbahaya (misal: diskusi ledakan tambang/bendungan)
+                # Mengizinkan konten teknis berbahaya
                 safety_settings_engineering = {
                     HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
                     HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
@@ -575,14 +664,13 @@ if prompt:
                 }
 
                 # --- [UPGRADE 2]: NATIVE SYSTEM INSTRUCTION ---
-                # Instruksi ditanam langsung di otak, bukan ditempel di chat. Lebih kuat & konsisten.
                 model = genai.GenerativeModel(
                     model_name=selected_model_name,
                     system_instruction=gems_persona[selected_gem], 
                     safety_settings=safety_settings_engineering
                 )
                 
-                # Format History untuk API Google (Strict User/Model role)
+                # Format History
                 hist_formatted = []
                 for h in history:
                     role_api = "user" if h['role']=="user" else "model"
@@ -592,7 +680,6 @@ if prompt:
                 chat_session = model.start_chat(history=hist_formatted)
                 
                 # --- [UPGRADE 3]: STREAMING RESPONSE ---
-                # Efek mengetik agar tidak terlihat 'lag'
                 response_stream = chat_session.send_message(content_to_send, stream=True)
                 
                 full_response_text = ""
@@ -601,7 +688,6 @@ if prompt:
                 for chunk in response_stream:
                     if chunk.text:
                         full_response_text += chunk.text
-                        # Update teks real-time
                         placeholder.markdown(full_response_text + "▌")
                 
                 # Final render tanpa kursor
@@ -610,13 +696,32 @@ if prompt:
                 # Simpan ke Database
                 db.simpan_chat(nama_proyek, selected_gem, "assistant", full_response_text)
                 
+                # ==================================================
+                # [FITUR BARU v9] AUTO GENERATE DOWNLOAD BUTTONS
+                # ==================================================
+                st.markdown("---")
+                col1, col2 = st.columns(2)
+                
+                # 1. Tombol WORD (Selalu Muncul)
+                docx_file = create_docx_from_text(full_response_text)
+                if docx_file:
+                    col1.download_button(
+                        label="📄 Download Laporan (.docx)",
+                        data=docx_file,
+                        file_name=f"Laporan_{selected_gem}_{nama_proyek}.docx",
+                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    )
+                
+                # 2. Tombol EXCEL (Cerdas: Hanya muncul jika ada tabel)
+                xlsx_file = extract_table_to_excel(full_response_text)
+                if xlsx_file:
+                    col2.download_button(
+                        label="📊 Download Tabel/RAB (.xlsx)",
+                        data=xlsx_file,
+                        file_name=f"Data_{selected_gem}_{nama_proyek}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
+                
             except Exception as e:
                 st.error(f"⚠️ Terjadi Kesalahan Teknis: {e}")
                 st.error("Saran: Coba ganti model ke 'Flash' atau periksa koneksi internet.")
-
-
-
-
-
-
-
