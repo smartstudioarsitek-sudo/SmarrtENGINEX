@@ -1,16 +1,8 @@
-# --- DATABASE ENGINEX (CRITICAL) ---
-# Jangan biarkan riwayat proyek dan data RAB terunggah
-database/
-*.db
-*.sqlite3
+# ====================================
+# .gitignore - ENGINEX SECURITY SHIELD
+# ====================================
 
-# --- CREDENTIALS & SECRETS ---
-# Melindungi API Key Google Gemini Anda
-.streamlit/secrets.toml
-.env
-.flaskenv
-
-# --- PYTHON CLUTTER ---
+# --- 1. Python & System Junk ---
 __pycache__/
 *.py[cod]
 *$py.class
@@ -18,17 +10,51 @@ __pycache__/
 env/
 venv/
 ENV/
-
-# --- LOCAL LOGS & TEMP ---
-# Agar log error lokal tidak memenuhi repo
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
 *.log
-.cache/
-.tmp/
+.manifest
 
-# --- OS METADATA ---
+# --- 2. Streamlit Cloud Specific ---
+# PENTING: Jangan upload secrets (API Key) ke publik!
+.streamlit/secrets.toml
+.streamlit/config.toml
+
+# --- 3. Database & Project Data ---
+# PENTING: Mencegah data proyek/chat bocor ke GitHub
+# SQLite Database
+*.db
+*.sqlite
+*.sqlite3
+database/
+
+# File Backup JSON (Kecuali Anda sengaja ingin upload)
+*.json
+
+# --- 4. OS Metadata (Mac/Windows) ---
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
 
-# --- STREAMLIT SPECIFIC ---
-# Mengabaikan data upload sementara
-pages/
+# --- 5. Editor Settings ---
+.vscode/
+.idea/
+*.swp
+
+# --- 6. Instance/Temp Files ---
+instance/
+.webassets-cache
