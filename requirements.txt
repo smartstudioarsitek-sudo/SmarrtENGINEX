@@ -12,6 +12,7 @@ PyPDF2
 python-docx
 python-pptx
 watchdog
+xlrd
 
 
 
