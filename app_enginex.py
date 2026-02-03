@@ -540,8 +540,9 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("### 📂 Serahkan Data (Upload)")
     uploaded_files = st.file_uploader(
-        "Lampirkan File (Gambar/PDF/Excel/Peta/Code):", 
-        type=["png", "jpg", "jpeg", "pdf", "docx", "xlsx", "pptx", "zip", "dwg", "kml", "kmz", "geojson", "gpx", "py"], 
+        "Lampirkan File (Gambar/PDF/Excel/Word/Peta/Code):", 
+        # TAMBAHKAN 'doc' dan 'xls' DI SINI
+        type=["png", "jpg", "jpeg", "pdf", "docx", "doc", "xlsx", "xls", "pptx", "zip", "dwg", "kml", "kmz", "geojson", "gpx", "py"], 
         accept_multiple_files=True,
         help="AI akan mengingat file ini selama sesi berlangsung."
     )
@@ -554,18 +555,19 @@ with st.sidebar:
         db.clear_chat(nama_proyek, selected_gem)
         st.session_state.processed_files.clear() # Reset Memori File
         st.rerun()
-
 # ==========================================
-# 5. FUNGSI BACA FILE (SEMUA FORMAT)
+# 5. FUNGSI BACA FILE (SEMUA FORMAT + LEGACY)
 # ==========================================
 def process_uploaded_file(uploaded_file):
     if uploaded_file is None: return None, None
     file_type = uploaded_file.name.split('.')[-1].lower()
     
     try:
-        # Gambar & Dokumen
+        # --- GAMBAR ---
         if file_type in ['png', 'jpg', 'jpeg']:
             return "image", Image.open(uploaded_file)
+        
+        # --- PDF ---
         elif file_type == 'pdf':
             pdf_reader = PyPDF2.PdfReader(uploaded_file)
             text = ""
@@ -573,13 +575,38 @@ def process_uploaded_file(uploaded_file):
                 extracted = page.extract_text()
                 if extracted: text += extracted + "\n"
             return "text", text
+        
+        # --- WORD MODERN (.docx) ---
         elif file_type == 'docx':
             doc = docx.Document(uploaded_file)
             text = "\n".join([para.text for para in doc.paragraphs])
             return "text", text
-        elif file_type == 'xlsx':
-            df = pd.read_excel(uploaded_file)
-            return "text", df.to_csv(index=False) 
+            
+        # --- WORD JADUL (.doc) [NEW] ---
+        elif file_type == 'doc':
+            # .doc adalah format biner yang sulit dibaca library Python standar.
+            # Kita gunakan teknik "Raw String Extraction" untuk mengambil teksnya.
+            try:
+                raw_data = uploaded_file.getvalue()
+                # Filter hanya karakter yang bisa dibaca (ASCII printable)
+                text = "".join([chr(b) for b in raw_data if 32 <= b <= 126 or b in [10, 13]])
+                return "text", f"[INFO: File .doc dibaca dalam mode Raw Text]\n{text}"
+            except Exception as e:
+                return "error", f"Gagal baca .doc (Disarankan convert ke .docx): {e}"
+
+        # --- EXCEL MODERN & JADUL (.xlsx & .xls) [UPDATED] ---
+        elif file_type in ['xlsx', 'xls']:
+            try:
+                # Pandas otomatis mendeteksi format.
+                # Syarat: Server harus sudah install 'xlrd' untuk file .xls
+                df = pd.read_excel(uploaded_file)
+                return "text", df.to_csv(index=False)
+            except ImportError:
+                return "error", "Library 'xlrd' belum terinstall. Mohon install untuk baca file .xls."
+            except Exception as e:
+                return "error", f"Error baca Excel: {e}"
+
+        # --- POWERPOINT ---
         elif file_type == 'pptx':
             prs = Presentation(uploaded_file)
             text = []
@@ -588,11 +615,11 @@ def process_uploaded_file(uploaded_file):
                     if hasattr(shape, "text"): text.append(shape.text)
             return "text", "\n".join(text)
         
-        # Script Code (.py)
+        # --- SCRIPT CODE ---
         elif file_type == 'py':
             return "text", uploaded_file.getvalue().decode("utf-8")
 
-        # Peta GIS (.gpx added)
+        # --- PETA GIS ---
         elif file_type in ['kml', 'geojson', 'gpx']:
             return "text", uploaded_file.getvalue().decode("utf-8")
         elif file_type == 'kmz':
@@ -600,17 +627,21 @@ def process_uploaded_file(uploaded_file):
                 kml_filename = [n for n in z.namelist() if n.endswith(".kml")][0]
                 with z.open(kml_filename) as f: return "text", f.read().decode("utf-8")
                 
-        # Zip / Lainnya
+        # --- ZIP ARCHIVE ---
         elif file_type == 'zip':
             with zipfile.ZipFile(uploaded_file, "r") as z:
                 return "text", f"Isi ZIP:\n{', '.join(z.namelist())}"
+        
+        # --- UNSUPPORTED ---
         elif file_type in ['dwg', 'shp']:
             return "error", "⚠️ Format Biner (DWG/SHP) tidak bisa dibaca langsung. Convert ke PDF/KML dulu."
             
     except Exception as e: 
-        return "error", f"Gagal baca: {e}"
+        return "error", f"Gagal baca file {uploaded_file.name}: {e}"
             
     return "error", "Format tidak didukung."
+
+
 
 # ==========================================
 # 6. AREA CHAT UTAMA
@@ -747,3 +778,4 @@ if prompt:
             except Exception as e:
                 st.error(f"⚠️ Terjadi Kesalahan Teknis: {e}")
                 st.error("Saran: Coba ganti model ke 'Flash' atau periksa koneksi internet.")
+
