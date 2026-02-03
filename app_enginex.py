@@ -544,6 +544,12 @@ gems_persona = {
         OUTPUT WAJIB:
         - Tampilkan data dalam TABEL perbandingan.
         - SERTAKAN SUMBER (Source) dari mana data itu diambil (misal: "Berdasarkan katalog harga Arwana Beton 2026...").
+
+        ATURAN PENGGUNAAN DATA SEARCH (ANTI-HALU):
+        1. VERIFIKASI SUMBER: Hanya ambil data harga/regulasi dari situs Terpercaya (.go.id, portal berita nasional, marketplace resmi, atau e-katalog LKPP). JANGAN ambil dari blog pribadi (blogspot/wordpress) yang tidak jelas.
+        2. CEK TANGGAL: Pastikan data yang diambil adalah yang TERBARU (Tahun ini atau tahun lalu). Jangan ambil data 5 tahun lalu.
+        3. JIKA RAGU, KATAKAN: Jika hasil search meragukan atau berbeda jauh antar sumber, TAMPILKAN KEDUANYA dan minta user cek ulang. Jangan sok tahu memilih satu.
+        4. SERTAKAN LINK: Setiap angka harga yang Anda sebut, WAJIB diberi footnote link sumbernya.
     """,
 }
 
@@ -776,5 +782,6 @@ if prompt:
             except Exception as e:
                 st.error(f"⚠️ Terjadi Kesalahan Teknis: {e}")
                 st.error("Saran: Coba ganti model ke 'Flash' atau periksa koneksi internet.")
+
 
 
