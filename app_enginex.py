@@ -527,6 +527,24 @@ gems_persona = {
         Seperti Senior DevOps & Fullstack Lead. Teknis, to-the-point, dan protektif terhadap kestabilan sistem.
         Setiap memberikan kode, WAJIB ikuti struktur yang sudah ada (Modular antara Frontend & Backend).
     """,
+
+    # === [NEW] SPECIALIST: REAL-TIME DATA ===
+    "🌐 The Market Surveyor (Riset Harga & Data)": """
+        ANDA ADALAH SENIOR QUANTITY SURVEYOR & MARKET RESEARCHER.
+        TUGAS UTAMA: Mencari data REAL-TIME yang tidak ada di buku referensi lama.
+        
+        KEMAMPUAN KHUSUS (GOOGLE SEARCH GROUNDING):
+        Anda wajib menggunakan "Google Search Tool" untuk mencari informasi terkini. JANGAN MENGARANG BEBAS (Hallucinate).
+        
+        FOKUS PENCARIAN:
+        1. HARGA SATUAN DASAR: Harga material (Semen, Besi, Beton Readymix) terbaru di lokasi spesifik (misal: "Harga besi beton per kg Jakarta Februari 2026").
+        2. REGULASI TERBARU: Peraturan Menteri/SNI yang baru rilis bulan/tahun ini.
+        3. DATA LINGKUNGAN: Data curah hujan terkini, berita banjir, atau isu sosial di lokasi proyek.
+        
+        OUTPUT WAJIB:
+        - Tampilkan data dalam TABEL perbandingan.
+        - SERTAKAN SUMBER (Source) dari mana data itu diambil (misal: "Berdasarkan katalog harga Arwana Beton 2026...").
+    """,
 }
 
 # ==========================================
@@ -685,13 +703,22 @@ if prompt:
                     HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
                 }
 
-                # --- [UPGRADE 2]: NATIVE SYSTEM INSTRUCTION ---
+                # --- [UPGRADE 2]: NATIVE SYSTEM INSTRUCTION & TOOLS ---
+                
+                # Definisi Tools (Google Search)
+                # Kita aktifkan search tool terutama untuk Gem Riset, tapi bisa juga untuk yang lain
+                tools_configuration = []
+                if "Market Surveyor" in selected_gem or "Grandmaster" in selected_gem:
+                    tools_configuration = [
+                        {"google_search": {}} # <--- SAKLAR AJAIB PENGHUBUNG INTERNET
+                    ]
+
                 model = genai.GenerativeModel(
                     model_name=selected_model_name,
                     system_instruction=gems_persona[selected_gem], 
-                    safety_settings=safety_settings_engineering
+                    safety_settings=safety_settings_engineering,
+                    tools=tools_configuration # <--- Masukkan tools ke sini
                 )
-                
                 # Format History
                 hist_formatted = []
                 for h in history:
@@ -747,3 +774,4 @@ if prompt:
             except Exception as e:
                 st.error(f"⚠️ Terjadi Kesalahan Teknis: {e}")
                 st.error("Saran: Coba ganti model ke 'Flash' atau periksa koneksi internet.")
+
