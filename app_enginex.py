@@ -709,27 +709,12 @@ if prompt:
                     HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
                 }
 
-              # --- [UPGRADE 2]: NATIVE SYSTEM INSTRUCTION & SEARCH TOOLS ---
-                
-                # 1. Cek Versi Library Dulu (Safety Check)
-                import pkg_resources
-                try:
-                    genai_version = pkg_resources.get_distribution("google-generativeai").version
-                    # Cek apakah versi cukup baru (minimal 0.7.0 untuk search)
-                    is_version_compatible = tuple(map(int, genai_version.split('.')[:2])) >= (0, 7)
-                except:
-                    is_version_compatible = False
-
-                # 2. Konfigurasi Tools
-                tools_configuration = None
-                search_enabled_roles = ["Market Surveyor", "Grandmaster", "Estimator", "System Core"]
-                
-                # Hanya aktifkan Search jika Gem butuh DAN Library support
-                if any(role in selected_gem for role in search_enabled_roles) and is_version_compatible:
-                    tools_configuration = [{"google_search": {}}]
-                    st.toast("🌐 Google Search: AKTIF", icon="✅")
-                elif any(role in selected_gem for role in search_enabled_roles) and not is_version_compatible:
-                    st.toast(f"⚠️ Search Nonaktif (Library Jadul: v{genai_version})", icon="❌")
+              # --- [UPGRADE 2]: NATIVE SYSTEM INSTRUCTION ---
+                model = genai.GenerativeModel(
+                    model_name=selected_model_name,
+                    system_instruction=gems_persona[selected_gem], 
+                    safety_settings=safety_settings_engineering
+                )
 
                 # 3. Init Model
                 model = genai.GenerativeModel(
@@ -793,6 +778,7 @@ if prompt:
             except Exception as e:
                 st.error(f"⚠️ Terjadi Kesalahan Teknis: {e}")
                 st.error("Saran: Coba ganti model ke 'Flash' atau periksa koneksi internet.")
+
 
 
 
