@@ -540,8 +540,8 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("### 📂 Serahkan Data (Upload)")
     uploaded_files = st.file_uploader(
-        "Lampirkan File (Gambar/PDF/Excel/Peta):", 
-        type=["png", "jpg", "jpeg", "pdf", "docx", "xlsx", "pptx", "zip", "dwg", "kml", "kmz", "geojson"], 
+        "Lampirkan File (Gambar/PDF/Excel/Peta/Code):", 
+        type=["png", "jpg", "jpeg", "pdf", "docx", "xlsx", "pptx", "zip", "dwg", "kml", "kmz", "geojson", "gpx", "py"], 
         accept_multiple_files=True,
         help="AI akan mengingat file ini selama sesi berlangsung."
     )
@@ -587,9 +587,13 @@ def process_uploaded_file(uploaded_file):
                 for shape in slide.shapes:
                     if hasattr(shape, "text"): text.append(shape.text)
             return "text", "\n".join(text)
-            
-        # Peta GIS
-        elif file_type in ['kml', 'geojson']:
+        
+        # Script Code (.py)
+        elif file_type == 'py':
+            return "text", uploaded_file.getvalue().decode("utf-8")
+
+        # Peta GIS (.gpx added)
+        elif file_type in ['kml', 'geojson', 'gpx']:
             return "text", uploaded_file.getvalue().decode("utf-8")
         elif file_type == 'kmz':
             with zipfile.ZipFile(uploaded_file, "r") as z:
@@ -743,5 +747,3 @@ if prompt:
             except Exception as e:
                 st.error(f"⚠️ Terjadi Kesalahan Teknis: {e}")
                 st.error("Saran: Coba ganti model ke 'Flash' atau periksa koneksi internet.")
-
-
