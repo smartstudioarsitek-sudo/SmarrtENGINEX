@@ -703,21 +703,23 @@ if prompt:
                     HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
                 }
 
-                # --- [UPGRADE 2]: NATIVE SYSTEM INSTRUCTION & TOOLS ---
+               # --- [UPGRADE 2]: NATIVE SYSTEM INSTRUCTION & SEARCH TOOLS ---
                 
-                # Definisi Tools (Google Search)
-                # Kita aktifkan search tool terutama untuk Gem Riset, tapi bisa juga untuk yang lain
-                tools_configuration = []
-                if "Market Surveyor" in selected_gem or "Grandmaster" in selected_gem:
+                # Definisi Tools (Google Search) - Aktifkan untuk Gem Riset
+                tools_configuration = None
+                
+                # Kita aktifkan search tool jika Gem-nya butuh data luar
+                if any(role in selected_gem for role in ["Market Surveyor", "Grandmaster", "Estimator"]):
+                     # Mengaktifkan Google Search built-in
                     tools_configuration = [
-                        {"google_search": {}} # <--- SAKLAR AJAIB PENGHUBUNG INTERNET
+                        {"google_search": {}} 
                     ]
 
                 model = genai.GenerativeModel(
                     model_name=selected_model_name,
                     system_instruction=gems_persona[selected_gem], 
                     safety_settings=safety_settings_engineering,
-                    tools=tools_configuration # <--- Masukkan tools ke sini
+                    tools=tools_configuration # <--- SAKLAR SEARCH DIAKTIFKAN DI SINI
                 )
                 # Format History
                 hist_formatted = []
@@ -774,4 +776,5 @@ if prompt:
             except Exception as e:
                 st.error(f"⚠️ Terjadi Kesalahan Teknis: {e}")
                 st.error("Saran: Coba ganti model ke 'Flash' atau periksa koneksi internet.")
+
 
