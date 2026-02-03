@@ -147,16 +147,19 @@ try:
 except Exception as e:
     st.error(f"Config Error: {e}")
 
-# Fungsi Auto-List Model
+# Fungsi Auto-List Model (DENGAN FILTER ANTI-ERROR)
 @st.cache_resource
 def get_available_models_from_google(api_key_trigger):
     try:
         model_list = []
         for m in genai.list_models():
+            # Hanya ambil model yang stabil & support tools (Gemini 1.5 ke atas)
             if 'generateContent' in m.supported_generation_methods:
-                model_list.append(m.name)
-        # Urutkan agar model terbaru/pro ada di atas
-        model_list.sort(key=lambda x: 'pro' not in x) 
+                if "gemini-1.5" in m.name or "gemini-2.0" in m.name:
+                    model_list.append(m.name)
+        
+        # Urutkan: Pro dulu, baru Flash
+        model_list.sort(key=lambda x: 'flash' in x) 
         return model_list, None
     except Exception as e:
         return [], str(e)
@@ -782,6 +785,7 @@ if prompt:
             except Exception as e:
                 st.error(f"⚠️ Terjadi Kesalahan Teknis: {e}")
                 st.error("Saran: Coba ganti model ke 'Flash' atau periksa koneksi internet.")
+
 
 
 
