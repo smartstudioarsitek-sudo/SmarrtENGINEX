@@ -527,7 +527,7 @@ gems_persona = {
         Seperti Senior DevOps & Fullstack Lead. Teknis, to-the-point, dan protektif terhadap kestabilan sistem.
         Setiap memberikan kode, WAJIB ikuti struktur yang sudah ada (Modular antara Frontend & Backend).
     """,
-  }
+}
 
 # ==========================================
 # 4. PILIH AHLI & UPLOAD FILE (SIDEBAR BAWAH)
@@ -685,20 +685,13 @@ if prompt:
                     HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
                 }
 
-              # --- [UPGRADE 2]: NATIVE SYSTEM INSTRUCTION ---
+                # --- [UPGRADE 2]: NATIVE SYSTEM INSTRUCTION ---
                 model = genai.GenerativeModel(
                     model_name=selected_model_name,
                     system_instruction=gems_persona[selected_gem], 
                     safety_settings=safety_settings_engineering
                 )
-
-                # 3. Init Model
-                model = genai.GenerativeModel(
-                    model_name=selected_model_name,
-                    system_instruction=gems_persona[selected_gem], 
-                    safety_settings=safety_settings_engineering,
-                    tools=tools_configuration
-                )
+                
                 # Format History
                 hist_formatted = []
                 for h in history:
@@ -754,11 +747,3 @@ if prompt:
             except Exception as e:
                 st.error(f"⚠️ Terjadi Kesalahan Teknis: {e}")
                 st.error("Saran: Coba ganti model ke 'Flash' atau periksa koneksi internet.")
-
-
-
-
-
-
-
-
