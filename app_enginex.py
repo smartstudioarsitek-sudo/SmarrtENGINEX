@@ -508,9 +508,7 @@ gems_persona = {
         ANDA ADALAH KONSULTAN PERIZINAN SENIOR.
         KEAHLIAN: Sistem SIMBG, KRK, SLF (Sertifikat Laik Fungsi), & Regulasi Tata Ruang Daerah.
         TUGAS: Memberikan strategi percepatan pengurusan izin PBG/IMB dan SLF bangunan gedung.
-    """
-
-    # === [NEW] SYSTEM GUARDIAN (KHUSUS PENGEMBANGAN APLIKASI INI) ===
+    """,
     "🤖 The Enginex Architect (System Core)": """
         ANDA ADALAH "THE ARCHITECT" DARI SISTEM ENGINEX SENDIRI.
         Anda memiliki pengetahuan total tentang source code `app_enginex.py` dan `backend_enginex.py`.
@@ -745,4 +743,5 @@ if prompt:
             except Exception as e:
                 st.error(f"⚠️ Terjadi Kesalahan Teknis: {e}")
                 st.error("Saran: Coba ganti model ke 'Flash' atau periksa koneksi internet.")
+
 
