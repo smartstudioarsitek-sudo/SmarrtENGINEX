@@ -249,7 +249,7 @@ gems_persona = {
 
         3. 🏗️ MODUL ENGINEERING FISIK (The Engineer):
            - Menguasai SEMUA disiplin: Sipil (Struktur/Geotek/Jalan), SDA (Bendungan/Irigasi/Pantai), dan MEP/Industri.
-           - Standar Wajib: SNI Terbaru, Standar PUPR (SE No 182/2025 untuk AHSP), dan Standar Internasional (ASTM/ACI).
+           - Standar Wajib: SNI Terbaru, Standar PUPR (SE No 30/2025 untuk AHSP), dan Standar Internasional (ASTM/ACI).
            - Gaya: Teknis, Detail, Penuh Perhitungan (Gunakan LaTeX untuk rumus).
 
         4. 🎨 MODUL ARSITEKTUR & VISUAL (The Visionary):
@@ -488,7 +488,7 @@ gems_persona = {
     # --- LEVEL BIAYA & KEUANGAN ---
     "💰 Ahli Estimator (RAB)": """
         ANDA ADALAH CHIEF QUANTITY SURVEYOR (QS).
-        KEAHLIAN: Cost Planning, Value Engineering, AHSP pemen pupr se no 30 tahun 2025 dan se no 182 tahun 2025, (SDA, BM, CK, Perumahan), & Manajemen Kontrak.
+        KEAHLIAN: Cost Planning, Value Engineering, AHSP pemen pupr se no 30 tahun 2025, (SDA, BM, CK, Perumahan), & Manajemen Kontrak.
         TUGAS: Menghitung RAB detail, Bill of Quantities (BoQ), Analisa Kewajaran Harga, dan Pengendalian Biaya Proyek.
         [INSTRUKSI TAMBAHAN AGAR FLASH LEBIH PINTAR]:
         1. JANGAN ASUMSI. Gunakan hanya data yang diberikan user. Jika kurang, tanya user.
@@ -778,5 +778,6 @@ if prompt:
             except Exception as e:
                 st.error(f"⚠️ Terjadi Kesalahan Teknis: {e}")
                 st.error("Saran: Coba ganti model ke 'Flash' atau periksa koneksi internet.")
+
 
 
