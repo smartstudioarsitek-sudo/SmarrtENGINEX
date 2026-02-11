@@ -4,27 +4,23 @@ import os
 import json
 from datetime import datetime
 import io
-import shutil
 
 class EnginexBackend:
     def __init__(self, db_path='enginex_core.db'):
         """
         Inisialisasi Backend Database.
-        CATATAN UNTUK STREAMLIT CLOUD:
-        Sistem file cloud seringkali 'Ephemeral' (sementara). 
-        Kita akan mencoba menyimpan di root dulu, jika gagal (Read-Only),
-        kita pindah ke folder sementara sistem (/tmp).
+        Mendukung sistem file 'Ephemeral' di Streamlit Cloud dengan failover ke /tmp
         """
         self.db_path = db_path
         self.conn = None
         self.cursor = None
         
-        # Coba koneksi ke Database
+        # Coba koneksi ke Database di lokasi utama
         try:
             self._connect_db(self.db_path)
         except sqlite3.OperationalError:
-            # Jika gagal (biasanya karena permission), pindah ke /tmp
-            print("⚠️ Read-Only Filesystem terdeteksi. Beralih ke /tmp/...")
+            # Jika gagal (biasanya karena permission Read-Only di Cloud), pindah ke /tmp
+            print("⚠️ Read-Only Filesystem terdeteksi. Beralih ke folder sementara (/tmp)...")
             temp_path = os.path.join('/tmp', os.path.basename(db_path))
             self._connect_db(temp_path)
             self.db_path = temp_path
@@ -32,8 +28,8 @@ class EnginexBackend:
         self.init_db()
 
     def _connect_db(self, path):
-        """Helper internal untuk koneksi database"""
-        # Pastikan folder tujuan ada (jika pakai folder)
+        """Helper internal untuk melakukan koneksi ke SQLite"""
+        # Pastikan folder tujuan ada
         folder = os.path.dirname(path)
         if folder and not os.path.exists(folder):
             os.makedirs(folder, exist_ok=True)
@@ -42,7 +38,7 @@ class EnginexBackend:
         self.cursor = self.conn.cursor()
 
     def init_db(self):
-        """Membuat tabel jika belum ada"""
+        """Membuat tabel riwayat_konsultasi jika belum ada"""
         try:
             self.cursor.execute('''
                 CREATE TABLE IF NOT EXISTS riwayat_konsultasi (
@@ -56,7 +52,7 @@ class EnginexBackend:
             ''')
             self.conn.commit()
         except Exception as e:
-            print(f"❌ Error Init DB: {e}")
+            print(f"❌ Error Init Database: {e}")
 
     # ==========================================
     # FITUR CHAT (CRUD)
@@ -80,7 +76,7 @@ class EnginexBackend:
         """Mengambil riwayat chat berdasarkan Proyek & Ahli"""
         try:
             query = "SELECT role, content FROM riwayat_konsultasi WHERE project_name = ? AND gem_name = ? ORDER BY id ASC"
-            # Menggunakan pandas untuk safety & kemudahan
+            # Menggunakan pandas untuk keamanan query & kemudahan format
             df = pd.read_sql(query, self.conn, params=(project, gem))
             
             # Konversi ke format list of dicts yang diminta Streamlit
@@ -90,7 +86,7 @@ class EnginexBackend:
             return []
 
     def clear_chat(self, project, gem):
-        """Menghapus chat spesifik (Reset)"""
+        """Menghapus chat spesifik (Reset Sesi)"""
         try:
             self.cursor.execute("DELETE FROM riwayat_konsultasi WHERE project_name = ? AND gem_name = ?", (project, gem))
             self.conn.commit()
@@ -98,7 +94,7 @@ class EnginexBackend:
             print(f"❌ Error Clear Chat: {e}")
 
     def daftar_proyek(self):
-        """List semua nama proyek unik"""
+        """List semua nama proyek unik yang ada di database"""
         try:
             df = pd.read_sql("SELECT DISTINCT project_name FROM riwayat_konsultasi", self.conn)
             if not df.empty:
@@ -112,7 +108,7 @@ class EnginexBackend:
     # ==========================================
 
     def export_data(self):
-        """Export semua data ke format JSON String"""
+        """Export semua data ke format JSON String untuk Backup"""
         try:
             df = pd.read_sql("SELECT * FROM riwayat_konsultasi", self.conn)
             # Konversi datetime ke string agar valid JSON
@@ -133,7 +129,7 @@ class EnginexBackend:
             if not data:
                 return False, "⚠️ File JSON kosong atau format salah."
 
-            # 3. Hapus Database Lama (Clean Slate) - Opsional, bisa diubah jadi append
+            # 3. Hapus Database Lama (Clean Slate) - Agar tidak duplikat
             self.cursor.execute("DELETE FROM riwayat_konsultasi")
             
             # 4. Proses DataFrame
@@ -144,7 +140,6 @@ class EnginexBackend:
                 df = df.drop(columns=['id'])
             
             # PENTING: Fix Format Tanggal
-            # SQLite butuh format standard, kita pastikan kolom tanggal dikenali
             if 'tanggal' in df.columns:
                 df['tanggal'] = pd.to_datetime(df['tanggal'], errors='coerce')
             
