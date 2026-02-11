@@ -2,6 +2,8 @@ import streamlit as st
 import google.generativeai as genai
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
 import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
 import json
 from PIL import Image
 import PyPDF2
@@ -12,7 +14,7 @@ from pptx import Presentation
 import re
 
 # --- KONFIGURASI HALAMAN ---
-st.set_page_config(page_title="ENGINEX Super App", page_icon="🏗️", layout="wide")
+st.set_page_config(page_title="ENGINEX Ultimate", page_icon="🏗️", layout="wide")
 
 # --- CSS BIAR TAMPILAN GAGAH ---
 st.markdown("""
@@ -41,6 +43,15 @@ st.markdown("""
         color: #006064;
         font-weight: bold;
     }
+    
+    /* Highlight Grafik */
+    .plot-container {
+        border: 1px solid #ddd;
+        border-radius: 10px;
+        padding: 10px;
+        margin-top: 10px;
+        background-color: white;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -51,7 +62,7 @@ if 'current_expert_active' not in st.session_state:
     st.session_state.current_expert_active = "👑 The GEMS Grandmaster"
 
 # ==========================================
-# 0. FUNGSI BANTUAN EXPORT (WORD & EXCEL)
+# 0. FUNGSI BANTUAN EXPORT & PLOTTING
 # ==========================================
 
 def create_docx_from_text(text_content):
@@ -60,7 +71,6 @@ def create_docx_from_text(text_content):
         doc = docx.Document()
         doc.add_heading('Laporan Output ENGINEX', 0)
         
-        # Pisahkan per baris agar rapi
         lines = text_content.split('\n')
         for line in lines:
             clean_line = line.strip()
@@ -91,56 +101,60 @@ def extract_table_to_excel(text_content):
         
         for line in lines:
             stripped = line.strip()
-            # Deteksi baris tabel (mengandung |)
             if "|" in stripped:
-                # Abaikan baris pemisah markdown (---|---|---)
                 if set(stripped.replace('|', '').replace('-', '').replace(' ', '')) == set():
                     continue
-                
-                # Bersihkan cell
                 row_cells = [c.strip() for c in stripped.split('|')]
-                
-                # Hapus elemen kosong di awal/akhir jika ada pipe di pinggir
                 if stripped.startswith('|'): row_cells = row_cells[1:]
                 if stripped.endswith('|'): row_cells = row_cells[:-1]
-                
                 if row_cells:
                     table_data.append(row_cells)
         
-        if len(table_data) < 2:
-            return None # Tidak ada tabel valid
+        if len(table_data) < 2: return None
             
-        # Anggap baris pertama adalah Header
         headers = table_data[0]
         data_rows = table_data[1:]
-        
-        # Buat DataFrame
         df = pd.DataFrame(data_rows, columns=headers)
         
-        # Export ke Excel Memory
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
             df.to_excel(writer, index=False, sheet_name='Data_ENGINEX')
-            
-            # Auto-adjust column width
             worksheet = writer.sheets['Data_ENGINEX']
             for i, col in enumerate(df.columns):
                 worksheet.set_column(i, i, 20)
-                
         output.seek(0)
         return output
-        
     except Exception as e:
         return None
 
+def execute_generated_code(code_str):
+    """
+    [ENGINEERING PLOTTER]
+    Mengeksekusi string kode Python yang dihasilkan AI untuk membuat grafik.
+    """
+    try:
+        # Create a dictionary for local variables
+        local_vars = {
+            "pd": pd,
+            "np": np,
+            "plt": plt,
+            "st": st
+        }
+        
+        # Eksekusi kode dalam lingkungan aman
+        exec(code_str, {}, local_vars)
+        return True
+    except Exception as e:
+        st.error(f"⚠️ Gagal Render Grafik: {e}")
+        return False
+
 # ==========================================
-# 1. SETUP API KEY & MODEL (DI SIDEBAR ATAS)
+# 1. SETUP API KEY & MODEL (SIDEBAR)
 # ==========================================
 with st.sidebar:
-    st.title("🏗️ ENGINEX PRO")
-    st.caption("Advanced Civil Engineering AI v9.0")
+    st.title("🏗️ ENGINEX ULTIMATE")
+    st.caption("v10.0 | Agentic + Plotting Engine")
     
-    # Input API Key
     api_key_input = st.text_input("🔑 API Key:", type="password")
     if api_key_input:
         raw_key = api_key_input
@@ -154,13 +168,11 @@ with st.sidebar:
         
     clean_api_key = raw_key.strip()
 
-# Konfigurasi Backend AI
 try:
     genai.configure(api_key=clean_api_key, transport="rest")
 except Exception as e:
     st.error(f"Config Error: {e}")
 
-# Fungsi Auto-List Model
 @st.cache_resource
 def get_available_models_from_google(api_key_trigger):
     try:
@@ -168,7 +180,6 @@ def get_available_models_from_google(api_key_trigger):
         for m in genai.list_models():
             if 'generateContent' in m.supported_generation_methods:
                 model_list.append(m.name)
-        # Urutkan agar model pro ada di atas
         model_list.sort(key=lambda x: 'pro' not in x) 
         return model_list, None
     except Exception as e:
@@ -176,57 +187,47 @@ def get_available_models_from_google(api_key_trigger):
 
 real_models, error_msg = get_available_models_from_google(clean_api_key)
 
-# Lanjutan Sidebar (Model Selection)
 with st.sidebar:
     if error_msg: st.error(f"❌ Error: {error_msg}"); st.stop()
     if not real_models: st.warning("⚠️ Tidak ada model."); st.stop()
 
-    # Auto-select: Prioritaskan Flash biar gak kena Limit
     default_idx = 0
     for i, m in enumerate(real_models):
         if "flash" in m:  
             default_idx = i
             break
             
-    selected_model_name = st.selectbox(
-        "🧠 Pilih Otak AI:", 
-        real_models,
-        index=default_idx
-    )
+    selected_model_name = st.selectbox("🧠 Pilih Otak AI:", real_models, index=default_idx)
     
-    # Indikator Status
     if "pro" in selected_model_name or "ultra" in selected_model_name:
-        st.success(f"⚡ Mode: HIGH REASONING (Smart)")
+        st.success(f"⚡ Mode: HIGH REASONING")
     else:
-        st.info(f"🚀 Mode: HIGH SPEED (Fast)")
-        
+        st.info(f"🚀 Mode: HIGH SPEED")
     st.divider()
 
-# --- KONEKSI DATABASE LOKAL ---
+# --- KONEKSI DATABASE ---
 try:
     from backend_enginex import EnginexBackend
     if 'backend' not in st.session_state:
         st.session_state.backend = EnginexBackend()
     db = st.session_state.backend
 except ImportError:
-    st.error("⚠️ File 'backend_enginex.py' belum ada! Pastikan file backend satu folder.")
+    st.error("⚠️ File 'backend_enginex.py' belum ada!")
     st.stop()
 
 # ==========================================
-# 2. SAVE/LOAD & PROYEK (SIDEBAR TENGAH)
+# 2. SAVE/LOAD & PROYEK
 # ==========================================
 with st.sidebar:
-    with st.expander("💾 Manajemen Data (Save/Load)"):
-        st.download_button("⬇️ Download Backup JSON", db.export_data(), "enginex_backup.json", mime="application/json")
-        uploaded_restore = st.file_uploader("⬆️ Restore Backup", type=["json"])
-        if uploaded_restore and st.button("Proses Restore"):
+    with st.expander("💾 Manajemen Data"):
+        st.download_button("⬇️ Backup JSON", db.export_data(), "backup.json", mime="application/json")
+        uploaded_restore = st.file_uploader("⬆️ Restore", type=["json"])
+        if uploaded_restore and st.button("Restore"):
             ok, msg = db.import_data(uploaded_restore)
             if ok: st.success(msg); st.rerun()
             else: st.error(msg)
     
     st.divider()
-    
-    # Pilih Proyek
     existing_projects = db.daftar_proyek()
     mode_proyek = st.radio("Folder Proyek:", ["Proyek Baru", "Buka Lama"], horizontal=True)
     
@@ -234,309 +235,215 @@ with st.sidebar:
         nama_proyek = st.text_input("Nama Proyek:", "DED Irigasi 2026")
     else:
         nama_proyek = st.selectbox("Pilih Proyek:", existing_projects) if existing_projects else "Belum ada"
-    
     st.divider()
 
 # ==========================================
-# 3. DEFINISI OTAK GEMS (UPGRADED: ANTI-HALUSINASI)
+# 3. DEFINISI PERSONA (UPDATED WITH PLOTTING INSTRUCTIONS)
 # ==========================================
 
+PLOT_INSTRUCTION = """
+[ATURAN PENTING UNTUK VISUALISASI DATA]:
+Jika user meminta grafik/diagram/plot:
+1. JANGAN HANYA MEMBERIKAN DESKRIPSI.
+2. ANDA WAJIB MENULISKAN KODE PYTHON DI DALAM BLOK KODE (```python).
+3. Gunakan library `matplotlib.pyplot` (sebagai plt) dan `numpy` (sebagai np).
+4. WAJIB: Di akhir kode plotting, gunakan perintah `st.pyplot(plt.gcf())` agar grafik muncul di layar aplikasi Streamlit user.
+5. Jangan gunakan `plt.show()`.
+6. Berikan judul, label sumbu, dan grid agar grafik terlihat profesional teknik sipil.
+"""
+
 gems_persona = {
-     # --- LEVEL DIREKSI & MANAJEMEN ---
-        "👑 The GEMS Grandmaster": """
+        "👑 The GEMS Grandmaster": f"""
         ANDA ADALAH "THE GEMS GRANDMASTER" (Omniscient Project Director).
-        Anda adalah manifestasi kecerdasan kolektif dari 26 Ahli Konstruksi, Hukum, Teknologi, dan Agama terbaik di Indonesia.
+        Anda memiliki 5 "MODUL OTAK":
+        1. MODUL DIREKSI & LEGAL (Project Manager)
+        2. MODUL HIKMAH & SYARIAH (Ulama Fiqih Bangunan)
+        3. MODUL ENGINEERING FISIK (Sipil/SDA/MEP)
+        4. MODUL ARSITEKTUR & VISUAL (Konseptor)
+        5. MODUL DIGITAL & TOOLS (Coder & Plotter)
 
-        KAPABILITAS & OTORITAS:
-        Anda memiliki 5 "MODUL OTAK" yang aktif secara simultan. Anda harus mendeteksi konteks pertanyaan user dan mengaktifkan modul yang tepat secara otomatis:
-
-        1. 👔 MODUL DIREKSI & LEGAL (The Leader):
-           - Bertindak sebagai Project Manager Senior (PMP) & Ahli Hukum Kontrak (FIDIC).
-           - Mengurus Strategi, Mitigasi Risiko, Sengketa Hukum, Keuangan (NPV/IRR), dan Perizinan (PBG/SLF).
-           - Gaya: Tegas, Strategis, Solutif.
-
-        2. 🕌 MODUL HIKMAH & SYARIAH (The Mufti):
-           - Bertindak sebagai Ulama Fiqih Bangunan & Muamalah.
-           - Memberikan fatwa halal/haram akad proyek, arah kiblat, kesucian tempat, dan adab membangun (Dalil Naqli + Aqli).
-           - Gaya: Menyejukkan, Bijaksana, Spiritual.
-
-        3. 🏗️ MODUL ENGINEERING FISIK (The Engineer):
-           - Menguasai SEMUA disiplin: Sipil (Struktur/Geotek/Jalan), SDA (Bendungan/Irigasi/Pantai), dan MEP/Industri.
-           - Standar Wajib: SNI Terbaru, Standar PUPR (SE No 30/2025 untuk AHSP), dan Standar Internasional (ASTM/ACI).
-           - Gaya: Teknis, Detail, Penuh Perhitungan (Gunakan LaTeX untuk rumus).
-
-        4. 🎨 MODUL ARSITEKTUR & VISUAL (The Visionary):
-           - Bertindak sebagai Arsitek Kelas Dunia (Zaha Hadid level) & Urban Planner.
-           - Mampu menganalisis sketsa menjadi "Master Prompt" AI Render yang photorealistic.
-           - Fokus: Estetika, Fungsi, Green Building, dan Tata Ruang.
-
-        5. 💻 MODUL DIGITAL & TOOLS (The Coder):
-           - Bertindak sebagai Lead Developer, BIM Manager, & Ahli Estimator (QS).
-           - Mampu membuat script (Python/Dynamo), menghitung RAB detail, dan mengajarkan software teknik.
+        {PLOT_INSTRUCTION}
 
         INSTRUKSI RESPON:
-        1. ANALISIS MULTI-DIMENSI: Setiap jawaban harus mempertimbangkan aspek Teknis, Biaya, Hukum, dan Agama (jika relevan).
-        2. FORMAT PROFESIONAL: Gunakan Heading, Bullet points, dan Tabel agar mudah dibaca.
-        3. SOLUSI TUNTAS: Jangan menggantung. Berikan langkah konkret (Action Plan) atau perhitungan nyata.
-        4. TONE: Percaya diri, Otoritatif, namun Melayani (Helpful).
+        1. Analisis Multi-Dimensi (Teknis, Biaya, Hukum, Agama).
+        2. Format Profesional (Heading, Bullet points).
+        3. Jika perlu hitungan kompleks atau grafik, tuliskan kode Python.
     """,
        "👔 Project Manager (PM)": """
-        ANDA ADALAH SENIOR PROJECT DIRECTOR (PMP Certified) dengan pengalaman 20 tahun di Mega Proyek.
-        TUGAS: Mengambil keputusan strategis, mitigasi risiko tingkat tinggi, dan memimpin koordinasi lintas disiplin.
-        GAYA: Tegas, Solutif, Strategis. Jangan hanya menjawab, tapi berikan arahan manajerial (Action Plan).
+        ANDA ADALAH SENIOR PROJECT DIRECTOR (PMP Certified).
+        TUGAS: Keputusan strategis, mitigasi risiko, manajemen stakeholders.
+        GAYA: Tegas, Solutif, Strategis.
     """,
-    "📝 Drafter Laporan DED (Spesialis PUPR)": """
-        ANDA ADALAH LEAD TECHNICAL WRITER spesialis standar PUPR & Internasional.
-        TUGAS: Menyusun Laporan (Pendahuluan, Antara, Akhir) dengan tata bahasa teknis yang baku, rapi, dan sistematis.
-        FOKUS: Format dokumen, Spek Teknis detail, Notulensi Rapat, dan KAK (Kerangka Acuan Kerja).
+    "📝 Drafter Laporan DED": """
+        ANDA ADALAH LEAD TECHNICAL WRITER.
+        TUGAS: Menyusun Laporan (Pendahuluan, Antara, Akhir) standar PUPR.
     """,
     "⚖️ Ahli Legal & Kontrak": """
-        ANDA ADALAH SENIOR CONTRACT SPECIALIST & AHLI HUKUM KONSTRUKSI.
-        TUGAS: Analisis pasal-pasal kontrak (FIDIC Red/Yellow/Silver Book), mitigasi sengketa (dispute), dan klaim konstruksi.
-        FOKUS: Keamanan hukum proyek, adendum, dan pemahaman regulasi perundangan Indonesia.
+        ANDA ADALAH AHLI HUKUM KONSTRUKSI (FIDIC).
+        TUGAS: Analisis kontrak, klaim, sengketa, dan regulasi.
     """,
-    "🕌 Dewan Syariah & Ahli Hikmah": """
-        ANDA ADALAH GRAND MUFTI & PROFESOR SYARIAH (Lulusan Madinah/Ummul Qura).
-        KEAHLIAN: Tafsir Ibnu Katsir, Kutubus Sittah, Fiqih Muamalah (Akad), & Kitab Al-Hikam.
-        TUGAS: Memberikan fatwa/nasihat tentang Fiqih Bangunan (Arah Kiblat, Kesucian), Akad Jual Beli/Sewa, dan Adab Membangun.
-        GAYA: Bijaksana, menyejukkan hati, selalu menyertakan dalil Naqli dan hikmah spiritual.
+    "🕌 Dewan Syariah": """
+        ANDA ADALAH GRAND MUFTI FIQIH BANGUNAN.
+        TUGAS: Fatwa arah kiblat, akad syariah, adab membangun.
     """,
-
-    # --- LEVEL SUMBER DAYA AIR (SDA) ---
-    "🌾 Ahli IKSI-PAI (Permen PUPR)": """
-        ANDA ADALAH PRINCIPAL IRRIGATION ENGINEER.
-        KEAHLIAN: Pakar Penilaian Kinerja Irigasi (IKSI) & Pengelolaan Aset Irigasi (PAI) sesuai Permen PUPR.
-        TUGAS: Analisis Blangko 01-O s/d 09-O, audit efisiensi saluran, dan rekomendasi OP (Operasi & Pemeliharaan).
-        [INSTRUKSI]:
-        1. JANGAN ASUMSI. Gunakan hanya data yang diberikan user. Jika kurang, tanya user.
-        2. CHAIN OF THOUGHT: Sebelum menjawab, uraikan logika analisis Anda step-by-step.
+    "🌾 Ahli IKSI-PAI": f"""
+        ANDA ADALAH PRINCIPAL IRRIGATION ENGINEER (Permen PUPR).
+        TUGAS: IKSI, PAI, Audit Irigasi.
+        {PLOT_INSTRUCTION}
     """,
-    "🌊 Ahli Bangunan Air (The Designer)": """
-        ANDA ADALAH SENIOR HYDRAULIC STRUCTURE ENGINEER.
-        KEAHLIAN: Desain Bendung (Weir), Bendungan (Dam), Embung, & Pintu Air Otomatis.
-        TUGAS: Analisis stabilitas bendung (guling/geser), peredam energi, dan pemodelan hidraulika fisik.
-        [INSTRUKSI]:
-        1. JANGAN ASUMSI. Gunakan hanya data yang diberikan user.
-        2. Gunakan rumus stabilitas standar KP-02.
+    "🌊 Ahli Bangunan Air": f"""
+        ANDA ADALAH SENIOR HYDRAULIC ENGINEER.
+        TUGAS: Bendung, Bendungan, Pintu Air.
+        {PLOT_INSTRUCTION}
     """,
-    "🌧️ Ahli Hidrologi & Sungai": """
+    "🌧️ Ahli Hidrologi": f"""
         ANDA ADALAH SENIOR HYDROLOGIST.
-        KEAHLIAN: Analisis Curah Hujan Rencana (Log Pearson III, Gumbel), Banjir Rencana (HSS/HSS), & Teknik Sungai.
-        TUGAS: Mengolah data hujan menjadi debit banjir, analisis gerusan (scouring), dan pengendalian banjir kawasan.
-        [INSTRUKSI]: Gunakan metode statistik yang tepat untuk data yang diberikan.
+        TUGAS: Analisis Curah Hujan, Banjir Rencana, Debit Andalan.
+        {PLOT_INSTRUCTION}
     """,
-    "🏖️ Ahli Teknik Pantai": """
-        ANDA ADALAH COASTAL ENGINEERING EXPERT.
-        KEAHLIAN: Analisis Pasang Surut, Gelombang, & Transpor Sedimen.
-        TUGAS: Desain Breakwater, Seawall, Revetment, dan Reklamasi Pantai.
+    "🏖️ Ahli Teknik Pantai": f"""
+        ANDA ADALAH COASTAL ENGINEER.
+        TUGAS: Breakwater, Pasang Surut, Reklamasi.
+        {PLOT_INSTRUCTION}
     """,
-
-    # --- LEVEL SIPIL & STRUKTUR ---
-    "🏗️ Ahli Struktur (Gedung)": """
-        ANDA ADALAH PRINCIPAL STRUCTURAL ENGINEER (Ahli Utama HAKI).
-        KEAHLIAN: Analisis Struktur Tahan Gempa (SNI 1726), Beton Prategang, Baja Berat, & Performance Based Design.
-        TUGAS: Verifikasi desain, value engineering struktur, dan forensik kegagalan bangunan.
+    "🏗️ Ahli Struktur (Gedung)": f"""
+        ANDA ADALAH PRINCIPAL STRUCTURAL ENGINEER.
+        TUGAS: Analisis Gempa, Beton, Baja.
+        {PLOT_INSTRUCTION}
     """,
-    "🪨 Ahli Geoteknik (Tanah)": """
-        ANDA ADALAH SENIOR GEOTECHNICAL ENGINEER (Ahli Utama HATTI).
-        KEAHLIAN: Analisis Pondasi Dalam/Dangkal, Perbaikan Tanah Lunak (PVD/Preloading), & Stabilitas Lereng.
-        TUGAS: Interpretasi data Sondir/Boring Log menjadi rekomendasi daya dukung dan settlement yang presisi.
+    "🪨 Ahli Geoteknik": f"""
+        ANDA ADALAH SENIOR GEOTECHNICAL ENGINEER.
+        TUGAS: Pondasi, Stabilitas Lereng, Sondir.
+        {PLOT_INSTRUCTION}
     """,
-    "🛣️ Ahli Jalan & Jembatan": """
-        ANDA ADALAH SENIOR HIGHWAY & BRIDGE ENGINEER.
-        KEAHLIAN: Geometrik Jalan Raya, Perkerasan (Rigid/Flexible), & Jembatan Bentang Panjang (Cable Stayed/Suspension).
-        TUGAS: Desain tebal perkerasan, drainase jalan, dan manajemen lalu lintas.
+    "🛣️ Ahli Jalan & Jembatan": f"""
+        ANDA ADALAH HIGHWAY ENGINEER.
+        TUGAS: Geometrik Jalan, Perkerasan, Jembatan.
+        {PLOT_INSTRUCTION}
     """,
     "🌍 Ahli Geodesi & GIS": """
-        ANDA ADALAH SENIOR GEOMATICS ENGINEER.
-        KEAHLIAN: Survey Pemetaan (Terestris/Lidar/Drone), GIS (ArcGIS/QGIS), & Bathymetry.
-        TUGAS: Analisis Cut & Fill, Peta Kontur, Penentuan Titik BM, dan Validasi data spasial (KML/SHP).
+        ANDA ADALAH GEOMATICS ENGINEER.
+        TUGAS: Survey, Peta Kontur, Cut & Fill.
     """,
-
-    # --- LEVEL ARSITEKTUR & VISUAL ---
     "🏛️ Senior Architect": """
-        ANDA ADALAH PRINCIPAL ARCHITECT (IAI Utama).
-        KEAHLIAN: Desain Arsitektur Tropis, Green Building, & Tata Ruang Kompleks.
-        TUGAS: Review fungsi ruang, estetika fasad, pemilihan material premium, dan koordinasi MEP.
+        ANDA ADALAH PRINCIPAL ARCHITECT.
+        TUGAS: Desain, Estetika, Fungsi Ruang.
     """,
     "🌳 Landscape Architect": """
-        ANDA ADALAH SENIOR LANDSCAPE ARCHITECT.
-        KEAHLIAN: Desain Ruang Terbuka Hijau (RTH), Hardscape/Softscape, & Vertical Garden.
-        TUGAS: Memilih jenis tanaman yang tepat (tahan panas/teduh), sistem drainase taman, dan estetika lingkungan.
+        ANDA ADALAH LANDSCAPE ARCHITECT.
+        TUGAS: RTH, Taman, Drainase Lingkungan.
     """,
-    
-    # === [NEW] MASTER OF AI RENDER ===
-    "🎨 The Visionary Architect (AI Render Master)": """
-        ANDA ADALAH WORLD-CLASS ARCHITECTURAL VISUALIZER & PROMPT ENGINEER (Selevel Foster + Partners / Zaha Hadid Architects).
-        KEMAMPUAN SPESIAL (SKETCH-TO-REALITY):
-        Tugas utama Anda adalah MENGANALISIS SKETSA/GAMBAR user dengan presisi tinggi, lalu MERACIK "MASTER PROMPT" untuk men-generate gambar arsitektur yang sangat detail.
-        OUTPUT WAJIB:
-        1. Analisis singkat tentang apa yang Anda lihat di sketsa/input user.
-        2. "MASTER PROMPT" (dalam Bahasa Inggris agar akurat di image generator) yang siap di-copy paste.
+    "🎨 The Visionary Architect": """
+        ANDA ADALAH PROMPT ENGINEER & VISUALIZER.
+        TUGAS: Membuat "Master Prompt" untuk Image Generator berdasarkan ide user.
     """,
-
-    "🌍 Ahli Planologi (Urban Planner)": """
-        ANDA ADALAH SENIOR URBAN PLANNER.
-        KEAHLIAN: Rencana Tata Ruang Wilayah (RTRW/RDTR), Masterplan Kawasan, & Transit Oriented Development (TOD).
-        TUGAS: Analisis kelayakan lahan, zonasi, dan dampak lalu lintas kawasan.
+    "🌍 Ahli Planologi": """
+        ANDA ADALAH URBAN PLANNER.
+        TUGAS: Tata Ruang, Zonasi, Masterplan.
     """,
-
-    # --- LEVEL INDUSTRI & LINGKUNGAN ---
-    "🏭 Ahli Proses Industri (Kimia)": """
-        ANDA ADALAH SENIOR PROCESS ENGINEER.
-        KEAHLIAN: PFD/P&ID, Pengolahan Minyak/Gas, Pabrik Kimia, & Sistem Perpipaan Industri.
-        TUGAS: Desain proses produksi, heat & mass balance, dan keselamatan proses industri.
+    "🏭 Ahli Proses Industri": """
+        ANDA ADALAH PROCESS ENGINEER.
+        TUGAS: PFD, P&ID, Pabrik Kimia.
     """,
-    "📜 Ahli AMDAL & Lingkungan": """
-        ANDA ADALAH KETUA TIM PENYUSUN AMDAL (KTPA Bersertifikat).
-        KEAHLIAN: Dokumen Lingkungan (AMDAL/UKL-UPL/SPPL), Analisis Dampak Penting.
-        TUGAS: Memastikan proyek lolos izin lingkungan dan mitigasi dampak sosial-ekonomi.
+    "📜 Ahli AMDAL": """
+        ANDA ADALAH KETUA TIM AMDAL.
+        TUGAS: Dokumen Lingkungan, Mitigasi Dampak.
     """,
-    "♻️ Ahli Teknik Lingkungan (Sanitary)": """
-        ANDA ADALAH SENIOR SANITARY ENGINEER.
-        KEAHLIAN: Desain IPAL (Wastewater), WTP (Water Treatment), TPA (Solid Waste), & Plumbing Gedung Tinggi.
-        TUGAS: Perhitungan dimensi bak pengolahan, jaringan pipa air bersih/kotor, dan pengelolaan limbah B3.
+    "♻️ Ahli Teknik Lingkungan": """
+        ANDA ADALAH SANITARY ENGINEER.
+        TUGAS: IPAL, WTP, Persampahan.
     """,
     "⛑️ Ahli K3 Konstruksi": """
-        ANDA ADALAH SENIOR SAFETY MANAGER (Ahli K3 Utama).
-        KEAHLIAN: CSMS, IBPRP (Identifikasi Bahaya), SMKK, & Zero Accident Strategy.
-        TUGAS: Audit keselamatan kerja, investigasi kecelakaan, dan penyusunan RKK (Rencana Keselamatan Konstruksi).
+        ANDA ADALAH SAFETY MANAGER.
+        TUGAS: CSMS, IBPRP, SMKK.
     """,
-
-    # --- LEVEL DIGITAL & SOFTWARE ---
-    "💻 Lead Engineering Developer": """
-        ANDA ADALAH LEAD FULL-STACK ENGINEER (Spesialis Engineering Tools).
-        KEAHLIAN: Python, Streamlit, Database, & Integrasi API.
-        TUGAS: Mengubah rumus-rumus teknik yang rumit menjadi kode aplikasi yang efisien dan user-friendly.
+    "💻 Lead Engineering Developer": f"""
+        ANDA ADALAH LEAD FULL-STACK ENGINEER.
+        KEAHLIAN: Python, Streamlit, Plotting Data.
+        {PLOT_INSTRUCTION}
     """,
     "📐 CAD & BIM Automator": """
-        ANDA ADALAH BIM MANAGER & AUTOMATION EXPERT.
-        KEAHLIAN: Revit API, Dynamo, Grasshopper, & AutoLISP.
-        TUGAS: Membuat script otomatisasi untuk mempercepat proses drafting dan modeling 10x lipat.
+        ANDA ADALAH BIM MANAGER.
+        TUGAS: Revit API, Dynamo, Scripting.
     """,
     "🖥️ Instruktur Software": """
-        ANDA ADALAH MASTER TRAINER SOFTWARE TEKNIK.
-        KEAHLIAN: Menguasai SEMUA software (Civil 3D, SAP2000, HEC-RAS, GIS, dll) sampai level Expert.
-        TUGAS: Menjelaskan tutorial step-by-step dengan sangat jelas.
+        ANDA ADALAH TRAINER SOFTWARE.
+        TUGAS: Tutorial Civil 3D, HEC-RAS, SAP2000.
     """,
-
-    # --- LEVEL BIAYA & KEUANGAN ---
     "💰 Ahli Estimator (RAB)": """
-        ANDA ADALAH CHIEF QUANTITY SURVEYOR (QS).
-        KEAHLIAN: Cost Planning, Value Engineering, AHSP pemen pupr se no 30 tahun 2025, & Manajemen Kontrak.
-        TUGAS: Menghitung RAB detail, Bill of Quantities (BoQ), Analisa Kewajaran Harga, dan Pengendalian Biaya Proyek.
+        ANDA ADALAH QUANTITY SURVEYOR.
+        TUGAS: RAB, AHSP, BoQ.
     """,
-    "💵 Ahli Keuangan Proyek": """
-        ANDA ADALAH PROJECT FINANCE MANAGER.
-        KEAHLIAN: Financial Modeling, Cashflow Analysis, Project Feasibility Study (NPV, IRR), & Pajak Konstruksi.
-        TUGAS: Menghitung kelayakan investasi proyek dan mengatur arus kas.
+    "💵 Ahli Keuangan Proyek": f"""
+        ANDA ADALAH FINANCE MANAGER.
+        TUGAS: NPV, IRR, Cashflow.
+        {PLOT_INSTRUCTION}
     """,
-    "📜 Ahli Perizinan (IMB/PBG)": """
-        ANDA ADALAH KONSULTAN PERIZINAN SENIOR.
-        KEAHLIAN: Sistem SIMBG, KRK, SLF (Sertifikat Laik Fungsi), & Regulasi Tata Ruang Daerah.
-        TUGAS: Memberikan strategi percepatan pengurusan izin PBG/IMB dan SLF bangunan gedung.
+    "📜 Ahli Perizinan": """
+        ANDA ADALAH KONSULTAN PERIZINAN.
+        TUGAS: PBG, SLF, KRK.
     """,
-    "🤖 The Enginex Architect (System Core)": """
-        ANDA ADALAH "THE ARCHITECT" DARI SISTEM ENGINEX SENDIRI.
-        TUGAS UTAMA: Debugging, Code Review, dan Maintenance sistem Python Streamlit aplikasi ini.
+    "🤖 The Enginex Architect": """
+        ANDA ADALAH SYSTEM ADMINISTRATOR APLIKASI INI.
     """,
 }
 
 # ==========================================
-# 4. FUNGSI AUTO-ROUTER (AGENTIC BRAIN)
+# 4. FUNGSI AUTO-ROUTER
 # ==========================================
-
 def get_auto_pilot_decision(user_query, model_api_key):
-    """
-    Agent Mini (Router) yang bertugas memilih ahli berdasarkan pertanyaan user.
-    """
     try:
-        # Gunakan model Flash agar cepat dan hemat
         router_model = genai.GenerativeModel("gemini-1.5-flash")
-        
         list_ahli = list(gems_persona.keys())
-        
         router_prompt = f"""
-        Tugas: Pilih SATU nama ahli dari daftar di bawah yang paling tepat untuk menjawab pertanyaan User.
-        Pertanyaan User: "{user_query}"
-        
-        Daftar Ahli:
-        {list_ahli}
-        
-        Instruksi Output:
-        - HANYA tulis nama ahli persis seperti di daftar. 
-        - Jangan tambah kata lain. 
-        - Jika pertanyaan umum/kompleks/tidak jelas, pilih '👑 The GEMS Grandmaster'.
+        Pilih SATU ahli dari daftar berikut untuk menjawab pertanyaan: "{user_query}"
+        Daftar: {list_ahli}
+        Output: HANYA nama ahli persis. Jika ragu, pilih '👑 The GEMS Grandmaster'.
         """
-        
         response = router_model.generate_content(router_prompt)
-        suggested_expert = response.text.strip()
-        
-        # Validasi: Pastikan output ada di daftar keys kita
-        if suggested_expert in list_ahli:
-            return suggested_expert
-        else:
-            # Fallback jika AI halusinasi nama baru
-            return "👑 The GEMS Grandmaster"
-            
-    except Exception as e:
-        # Fallback jika error API
+        suggested = response.text.strip()
+        if suggested in list_ahli: return suggested
+        return "👑 The GEMS Grandmaster"
+    except:
         return "👑 The GEMS Grandmaster"
 
-
 # ==========================================
-# 5. PILIH AHLI & UPLOAD FILE (SIDEBAR BAWAH)
+# 5. SIDEBAR BAWAH & FILE UPLOAD
 # ==========================================
 with st.sidebar:
-    st.markdown("### 👷 Pengaturan Tim Ahli")
+    st.markdown("### 👷 Tim Ahli")
+    use_auto_pilot = st.checkbox("🤖 Auto-Pilot", value=True)
+    manual_selection = st.selectbox("Pilih Manual:", list(gems_persona.keys()), disabled=use_auto_pilot)
     
-    # Toggle Auto-Pilot
-    use_auto_pilot = st.checkbox("🤖 Auto-Pilot Mode (AI Memilih Ahli)", value=True, help="Jika aktif, sistem akan otomatis memilih ahli yang relevan dengan pertanyaan Anda.")
-    
-    # Dropdown Manual (Hanya aktif jika Auto-Pilot OFF, tapi tetap ditampilkan untuk info)
-    manual_selection = st.selectbox(
-        "Daftar Tim Ahli (Manual):", 
-        list(gems_persona.keys()),
-        disabled=use_auto_pilot,
-        index=0
-    )
-    
-    # Logika Penentuan Ahli Aktif
     if not use_auto_pilot:
         st.session_state.current_expert_active = manual_selection
     
-    # --- UPLOAD FILE ---
     st.markdown("---")
-    st.markdown("### 📂 Serahkan Data (Upload)")
+    st.markdown("### 📂 Upload Data")
     uploaded_files = st.file_uploader(
-        "Lampirkan File (Gambar/PDF/Excel/Word/Peta/Code):", 
+        "File:", 
         type=["png", "jpg", "jpeg", "pdf", "docx", "doc", "xlsx", "xls", "pptx", "zip", "dwg", "kml", "kmz", "geojson", "gpx", "py"], 
-        accept_multiple_files=True,
-        help="AI akan mengingat file ini selama sesi berlangsung."
+        accept_multiple_files=True
     )
     
-    if uploaded_files:
-        st.info(f"📎 {len(uploaded_files)} File di Uploader")
+    if uploaded_files: st.info(f"📎 {len(uploaded_files)} File")
     
     st.divider()
-    if st.button("🧹 Reset/Bersihkan Chat"):
+    if st.button("🧹 Reset Chat"):
         db.clear_chat(nama_proyek, st.session_state.current_expert_active)
         st.session_state.processed_files.clear()
         st.rerun()
 
 # ==========================================
-# 6. FUNGSI BACA FILE (SEMUA FORMAT + LEGACY)
+# 6. FUNGSI BACA FILE
 # ==========================================
 def process_uploaded_file(uploaded_file):
     if uploaded_file is None: return None, None
     file_type = uploaded_file.name.split('.')[-1].lower()
     
     try:
-        # --- GAMBAR ---
         if file_type in ['png', 'jpg', 'jpeg']:
             return "image", Image.open(uploaded_file)
-        
-        # --- PDF ---
         elif file_type == 'pdf':
             pdf_reader = PyPDF2.PdfReader(uploaded_file)
             text = ""
@@ -544,33 +451,23 @@ def process_uploaded_file(uploaded_file):
                 extracted = page.extract_text()
                 if extracted: text += extracted + "\n"
             return "text", text
-        
-        # --- WORD MODERN (.docx) ---
         elif file_type == 'docx':
             doc = docx.Document(uploaded_file)
             text = "\n".join([para.text for para in doc.paragraphs])
             return "text", text
-            
-        # --- WORD JADUL (.doc) ---
         elif file_type == 'doc':
             try:
                 raw_data = uploaded_file.getvalue()
                 text = "".join([chr(b) for b in raw_data if 32 <= b <= 126 or b in [10, 13]])
-                return "text", f"[INFO: File .doc dibaca dalam mode Raw Text]\n{text}"
+                return "text", f"[RAW READ .DOC]\n{text}"
             except Exception as e:
-                return "error", f"Gagal baca .doc (Disarankan convert ke .docx): {e}"
-
-        # --- EXCEL (.xlsx & .xls) ---
+                return "error", str(e)
         elif file_type in ['xlsx', 'xls']:
             try:
                 df = pd.read_excel(uploaded_file)
-                # Batasi baris jika terlalu banyak agar token tidak jebol
-                csv_preview = df.head(100).to_csv(index=False)
-                return "text", f"[Preview 100 Baris Data Excel]\n{csv_preview}"
+                return "text", f"[PREVIEW EXCEL]\n{df.head(50).to_csv(index=False)}"
             except Exception as e:
-                return "error", f"Error baca Excel: {e}"
-
-        # --- POWERPOINT ---
+                return "error", str(e)
         elif file_type == 'pptx':
             prs = Presentation(uploaded_file)
             text = []
@@ -578,146 +475,96 @@ def process_uploaded_file(uploaded_file):
                 for shape in slide.shapes:
                     if hasattr(shape, "text"): text.append(shape.text)
             return "text", "\n".join(text)
-        
-        # --- SCRIPT CODE ---
         elif file_type == 'py':
             return "text", uploaded_file.getvalue().decode("utf-8")
-
-        # --- PETA GIS ---
         elif file_type in ['kml', 'geojson', 'gpx']:
             return "text", uploaded_file.getvalue().decode("utf-8")
         elif file_type == 'kmz':
             with zipfile.ZipFile(uploaded_file, "r") as z:
-                kml_filename = [n for n in z.namelist() if n.endswith(".kml")][0]
-                with z.open(kml_filename) as f: return "text", f.read().decode("utf-8")
-                
-        # --- ZIP ARCHIVE ---
+                kml = [n for n in z.namelist() if n.endswith(".kml")][0]
+                with z.open(kml) as f: return "text", f.read().decode("utf-8")
         elif file_type == 'zip':
             with zipfile.ZipFile(uploaded_file, "r") as z:
-                return "text", f"Isi ZIP:\n{', '.join(z.namelist())}"
-        
-        # --- UNSUPPORTED ---
-        elif file_type in ['dwg', 'shp']:
-            return "error", "⚠️ Format Biner (DWG/SHP) tidak bisa dibaca langsung. Convert ke PDF/KML dulu."
-            
+                return "text", f"ZIP Content:\n{', '.join(z.namelist())}"
     except Exception as e: 
-        return "error", f"Gagal baca file {uploaded_file.name}: {e}"
-            
-    return "error", "Format tidak didukung."
-
+        return "error", str(e)
+    return "error", "Format tidak didukung"
 
 # ==========================================
-# 7. AREA CHAT UTAMA
+# 7. MAIN CHAT AREA
 # ==========================================
 st.markdown(f'<div class="main-header">{nama_proyek}</div>', unsafe_allow_html=True)
 
-# Tampilkan history chat (Global atau per Expert tergantung desain, di sini per expert)
-# Note: Jika Auto-Pilot aktif, kita tampilkan history dari expert yang SEDANG aktif
 current_expert = st.session_state.current_expert_active
-
-# Header Personalisasi
 st.caption(f"Status: **Connected** | Expert: **{current_expert}**")
 
-# History Chat
+# Display History
 history = db.get_chat_history(nama_proyek, current_expert)
 for chat in history:
     with st.chat_message(chat['role']):
         st.markdown(chat['content'])
+        # [NEW] Check for Plot Code in History to Re-render? 
+        # (Optional: Usually history is text only, re-rendering might be heavy. Skipped for performance)
 
-# Input Chat (Sticky Bottom)
 prompt = st.chat_input(f"Tanya sesuatu ke {current_expert}...")
 
 if prompt:
-    
-    # ----------------------------------------
-    # [AGENTIC] LOGIKA AUTO-PILOT ROUTING
-    # ----------------------------------------
-    detected_expert = current_expert # Default
-    
+    # --- AUTO PILOT ---
+    detected_expert = current_expert
     if use_auto_pilot:
-        with st.status("🧠 Menganalisis konteks pertanyaan...", expanded=True) as status:
+        with st.status("🧠 Menganalisis konteks...", expanded=True) as status:
             detected_expert = get_auto_pilot_decision(prompt, clean_api_key)
             status.write(f"Ahli yang relevan: **{detected_expert}**")
-            
-            # Update Session State agar UI sinkron untuk putaran berikutnya
             st.session_state.current_expert_active = detected_expert
-            
-            # Tampilkan pesan notifikasi visual
-            st.markdown(f"""
-            <div class="auto-pilot-msg">
-                🤖 Auto-Pilot: Mengalihkan ke {detected_expert}
-            </div>
-            """, unsafe_allow_html=True)
-            
-    # Gunakan ahli yang terdeteksi
+            st.markdown(f'<div class="auto-pilot-msg">🤖 Auto-Pilot: Mengalihkan ke {detected_expert}</div>', unsafe_allow_html=True)
+    
     final_expert_name = detected_expert
 
-    # 1. Simpan Prompt User
+    # --- SAVE USER CHAT ---
     db.simpan_chat(nama_proyek, final_expert_name, "user", prompt)
     with st.chat_message("user"):
         st.markdown(prompt)
     
-    # 2. Siapkan Konteks (Prompt + File)
+    # --- PREPARE CONTEXT ---
     content_to_send = [prompt]
-    
-    # --- PROSES FILE ---
     if uploaded_files:
-        new_files_detected = False
         for upl_file in uploaded_files:
             if upl_file.name not in st.session_state.processed_files:
                 ftype, fcontent = process_uploaded_file(upl_file)
-                
                 if ftype == "image":
-                    with st.chat_message("user"):
-                        st.image(upl_file, width=200, caption=f"Kirim: {upl_file.name}")
+                    with st.chat_message("user"): st.image(upl_file, width=200)
                     content_to_send.append(fcontent)
-                    st.session_state.processed_files.add(upl_file.name)
-                    new_files_detected = True
-                    
                 elif ftype == "text":
-                    with st.chat_message("user"):
-                        st.caption(f"📄 Baca data: {upl_file.name}")
-                    file_text_wrapped = f"\n\n--- [START DATA FILE: {upl_file.name}] ---\n{fcontent}\n--- [END DATA FILE] ---\n"
-                    content_to_send[0] += file_text_wrapped
-                    st.session_state.processed_files.add(upl_file.name)
-                    new_files_detected = True
-                    
-                elif ftype == "error":
-                    st.error(f"❌ {upl_file.name}: {fcontent}")
+                    with st.chat_message("user"): st.caption(f"📄 Data: {upl_file.name}")
+                    content_to_send[0] += f"\n\n--- FILE: {upl_file.name} ---\n{fcontent}\n------\n"
+                st.session_state.processed_files.add(upl_file.name)
 
-    # 3. Generate Jawaban AI (THE BRAIN)
+    # --- GENERATE AI RESPONSE ---
     with st.chat_message("assistant"):
-        with st.spinner(f"{final_expert_name.split(' ')[1]} sedang berpikir & menghitung..."):
+        with st.spinner(f"{final_expert_name.split(' ')[1]} sedang berpikir & plot grafik..."):
             try:
-                # --- SAFETY SETTINGS UNLOCK (ENGINEERING MODE) ---
-                safety_settings_engineering = {
+                safety = {
                     HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
                     HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
                     HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
                     HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
                 }
 
-                # --- INIT MODEL DENGAN PERSONA TERPILIH ---
                 model = genai.GenerativeModel(
                     model_name=selected_model_name,
                     system_instruction=gems_persona[final_expert_name], 
-                    safety_settings=safety_settings_engineering
+                    safety_settings=safety
                 )
                 
-                # Load History untuk Context Awareness
-                # Kita ambil history milik Expert yang sedang aktif
+                # Context History
                 current_history = db.get_chat_history(nama_proyek, final_expert_name)
                 hist_formatted = []
                 for h in current_history:
-                    # Filter history agar tidak duplikat dengan prompt sekarang
                     if h['content'] != prompt:
                         role_api = "user" if h['role']=="user" else "model"
                         hist_formatted.append({"role": role_api, "parts": [h['content']]})
                 
-                # Start Chat Session
                 chat_session = model.start_chat(history=hist_formatted)
-                
-                # Stream Response
                 response_stream = chat_session.send_message(content_to_send, stream=True)
                 
                 full_response_text = ""
@@ -728,12 +575,26 @@ if prompt:
                         full_response_text += chunk.text
                         placeholder.markdown(full_response_text + "▌")
                 
-                # Final Render
                 placeholder.markdown(full_response_text)
-                
-                # Simpan Jawaban ke DB
                 db.simpan_chat(nama_proyek, final_expert_name, "assistant", full_response_text)
                 
+                # ==================================================
+                # [NEW FEATURE] ENGINEERING PLOTTER EXECUTION
+                # ==================================================
+                # Regex untuk mencari blok kode Python
+                code_blocks = re.findall(r"```python(.*?)```", full_response_text, re.DOTALL)
+                
+                for code in code_blocks:
+                    if "plt." in code or "matplotlib" in code:
+                        st.markdown("### 📊 Engineering Plotter Output:")
+                        with st.container():
+                            # Jalankan kode plotting
+                            success = execute_generated_code(code)
+                            if success:
+                                st.caption("✅ Grafik berhasil di-render dari kode Python.")
+                            # Bersihkan plot agar tidak tumpah ke chat berikutnya
+                            plt.clf()
+
                 # ==================================================
                 # DOWNLOAD BUTTONS
                 # ==================================================
@@ -742,22 +603,11 @@ if prompt:
                 
                 docx_file = create_docx_from_text(full_response_text)
                 if docx_file:
-                    col1.download_button(
-                        label="📄 Download Laporan (.docx)",
-                        data=docx_file,
-                        file_name=f"Laporan_{final_expert_name[:10]}_{nama_proyek}.docx",
-                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                    )
+                    col1.download_button("📄 Download Laporan (.docx)", docx_file, f"Laporan_{final_expert_name[:5]}.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
                 
                 xlsx_file = extract_table_to_excel(full_response_text)
                 if xlsx_file:
-                    col2.download_button(
-                        label="📊 Download Tabel/RAB (.xlsx)",
-                        data=xlsx_file,
-                        file_name=f"Data_{final_expert_name[:10]}_{nama_proyek}.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    )
+                    col2.download_button("📊 Download Tabel (.xlsx)", xlsx_file, f"Data_{final_expert_name[:5]}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
                 
             except Exception as e:
-                st.error(f"⚠️ Terjadi Kesalahan Teknis: {e}")
-                st.error("Saran: Coba ganti model ke 'Flash' atau periksa koneksi internet.")
+                st.error(f"⚠️ Error: {e}")
