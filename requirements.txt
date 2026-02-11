@@ -13,6 +13,7 @@ python-docx
 python-pptx
 watchdog
 xlrd
+numpy
 
 
 
