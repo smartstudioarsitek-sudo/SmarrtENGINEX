@@ -287,7 +287,7 @@ manual_selection = st.selectbox(
 )
           
 st.markdown("---")
-    st.markdown("### 📂 Upload Data")
+st.markdown("### 📂 Upload Data")
     uploaded_files = st.file_uploader(
         "File:", 
         type=["png", "jpg", "jpeg", "pdf", "docx", "doc", "xlsx", "xls", "pptx", "zip", "dwg", "kml", "kmz", "geojson", "gpx", "py"], 
@@ -479,6 +479,7 @@ if prompt:
                 
             except Exception as e:
                 st.error(f"⚠️ Error: {e}")
+
 
 
 
