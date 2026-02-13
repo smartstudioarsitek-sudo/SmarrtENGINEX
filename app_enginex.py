@@ -285,9 +285,8 @@ manual_selection = st.selectbox(
     disabled=use_auto_pilot,
     index=0
 )
-    
-      
-    st.markdown("---")
+          
+st.markdown("---")
     st.markdown("### 📂 Upload Data")
     uploaded_files = st.file_uploader(
         "File:", 
@@ -480,5 +479,6 @@ if prompt:
                 
             except Exception as e:
                 st.error(f"⚠️ Error: {e}")
+
 
 
