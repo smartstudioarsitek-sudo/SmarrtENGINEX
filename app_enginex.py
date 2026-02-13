@@ -153,7 +153,7 @@ def execute_generated_code(code_str):
 # ==========================================
 with st.sidebar:
     st.title("🏗️ ENGINEX ULTIMATE")
-    st.caption("v10.0 | Agentic + Plotting Engine")
+    st.caption("v10.1 | Level 2 (Drafter) & Level 3 (Engineer)")
     
     api_key_input = st.text_input("🔑 API Key:", type="password")
     if api_key_input:
@@ -204,13 +204,11 @@ with st.sidebar:
     else:
         st.info(f"🚀 Mode: HIGH SPEED")
     
-    # [FIX] Checkbox Auto-Pilot
     use_auto_pilot = st.checkbox("🤖 Mode Auto-Pilot", value=False)
     
     st.divider()
 
-# --- KONEKSI DATABASE ---
-# --- IMPORT BACKEND & PERSONA ---
+# --- KONEKSI DATABASE & PERSONA ---
 try:
     from backend_enginex import EnginexBackend
     from persona import gems_persona, get_persona_list, get_system_instruction
@@ -245,7 +243,7 @@ with st.sidebar:
     st.divider()
 
 # ==========================================
-# 3. DEFINISI PERSONA (UPDATED WITH PLOTTING INSTRUCTIONS)
+# 3. DEFINISI PERSONA (INSTRUKSI PLOTTING)
 # ==========================================
 
 PLOT_INSTRUCTION = """
@@ -292,7 +290,6 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("### 📂 Upload Data")
     
-    # [FIX] Indentasi diperbaiki di sini
     uploaded_files = st.file_uploader(
         "File:", 
         type=["png", "jpg", "jpeg", "pdf", "docx", "doc", "xlsx", "xls", "pptx", "zip", "dwg", "kml", "kmz", "geojson", "gpx", "py"], 
@@ -412,7 +409,7 @@ if prompt:
 
     # --- GENERATE AI RESPONSE ---
     with st.chat_message("assistant"):
-        with st.spinner(f"{final_expert_name.split(' ')[1]} sedang berpikir & plot grafik..."):
+        with st.spinner(f"{final_expert_name.split(' ')[1]} sedang berpikir..."):
             try:
                 safety = {
                     HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
@@ -421,8 +418,24 @@ if prompt:
                     HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
                 }
 
-                # Menggabungkan instruksi persona dengan instruksi plotting
-                full_system_instruction = gems_persona[final_expert_name] + "\n\n" + PLOT_INSTRUCTION
+                # ==========================================================
+                # [MODIFIKASI PENTING: LEVEL 2 (TEXT) vs LEVEL 3 (PLOTTING)]
+                # ==========================================================
+                
+                # Daftar ahli yang TIDAK BOLEH dikasih senjata coding (Hanya Ngetik)
+                level_2_agents = ["Drafter", "Legal", "Visionary", "Admin", "Syariah"]
+                
+                # Cek apakah ahli saat ini masuk golongan Level 2?
+                is_text_only = any(keyword in final_expert_name for keyword in level_2_agents)
+                
+                base_instruction = gems_persona[final_expert_name]
+                
+                if is_text_only:
+                    # MODE PENURUT: Hanya bawa instruksi dasar.
+                    full_system_instruction = base_instruction
+                else:
+                    # MODE INSINYUR: Bawa instruksi dasar + instruksi plotting.
+                    full_system_instruction = base_instruction + "\n\n" + PLOT_INSTRUCTION
 
                 model = genai.GenerativeModel(
                     model_name=selected_model_name,
@@ -453,20 +466,19 @@ if prompt:
                 db.simpan_chat(nama_proyek, final_expert_name, "assistant", full_response_text)
                 
                 # ==================================================
-                # [NEW FEATURE] ENGINEERING PLOTTER EXECUTION
+                # ENGINEERING PLOTTER EXECUTION
                 # ==================================================
-                code_blocks = re.findall(r"```python(.*?)```", full_response_text, re.DOTALL)
-                
-                for code in code_blocks:
-                    if "plt." in code or "matplotlib" in code:
-                        st.markdown("### 📊 Engineering Plotter Output:")
-                        with st.container():
-                            # Jalankan kode plotting
-                            success = execute_generated_code(code)
-                            if success:
-                                st.caption("✅ Grafik berhasil di-render dari kode Python.")
-                            # Bersihkan plot agar tidak tumpah ke chat berikutnya
-                            plt.clf()
+                # Hanya jalankan plotter jika bukan text-only agent (Double Check)
+                if not is_text_only:
+                    code_blocks = re.findall(r"```python(.*?)```", full_response_text, re.DOTALL)
+                    for code in code_blocks:
+                        if "plt." in code or "matplotlib" in code:
+                            st.markdown("### 📊 Engineering Plotter Output:")
+                            with st.container():
+                                success = execute_generated_code(code)
+                                if success:
+                                    st.caption("✅ Grafik berhasil di-render dari kode Python.")
+                                plt.clf()
 
                 # ==================================================
                 # DOWNLOAD BUTTONS
