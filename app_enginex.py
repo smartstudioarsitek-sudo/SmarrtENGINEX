@@ -206,13 +206,17 @@ with st.sidebar:
     st.divider()
 
 # --- KONEKSI DATABASE ---
+# --- IMPORT BACKEND & PERSONA ---
 try:
     from backend_enginex import EnginexBackend
+    # IMPORT BARU DISINI:
+    from persona import gems_persona, get_persona_list, get_system_instruction
+    
     if 'backend' not in st.session_state:
         st.session_state.backend = EnginexBackend()
     db = st.session_state.backend
-except ImportError:
-    st.error("⚠️ File 'backend_enginex.py' belum ada!")
+except ImportError as e:
+    st.error(f"⚠️ Error Import File: {e}")
     st.stop()
 
 # ==========================================
@@ -252,142 +256,6 @@ Jika user meminta grafik/diagram/plot:
 6. Berikan judul, label sumbu, dan grid agar grafik terlihat profesional teknik sipil.
 """
 
-gems_persona = {
-        "👑 The GEMS Grandmaster": f"""
-        ANDA ADALAH "THE GEMS GRANDMASTER" (Omniscient Project Director).
-        Anda memiliki 5 "MODUL OTAK":
-        1. MODUL DIREKSI & LEGAL (Project Manager)
-        2. MODUL HIKMAH & SYARIAH (Ulama Fiqih Bangunan)
-        3. MODUL ENGINEERING FISIK (Sipil/SDA/MEP)
-        4. MODUL ARSITEKTUR & VISUAL (Konseptor)
-        5. MODUL DIGITAL & TOOLS (Coder & Plotter)
-
-        {PLOT_INSTRUCTION}
-
-        INSTRUKSI RESPON:
-        1. Analisis Multi-Dimensi (Teknis, Biaya, Hukum, Agama).
-        2. Format Profesional (Heading, Bullet points).
-        3. Jika perlu hitungan kompleks atau grafik, tuliskan kode Python.
-    """,
-       "👔 Project Manager (PM)": """
-        ANDA ADALAH SENIOR PROJECT DIRECTOR (PMP Certified).
-        TUGAS: Keputusan strategis, mitigasi risiko, manajemen stakeholders.
-        GAYA: Tegas, Solutif, Strategis.
-    """,
-    "📝 Drafter Laporan DED": """
-        ANDA ADALAH LEAD TECHNICAL WRITER.
-        TUGAS: Menyusun Laporan (Pendahuluan, Antara, Akhir) standar PUPR.
-    """,
-    "⚖️ Ahli Legal & Kontrak": """
-        ANDA ADALAH AHLI HUKUM KONSTRUKSI (FIDIC).
-        TUGAS: Analisis kontrak, klaim, sengketa, dan regulasi.
-    """,
-    "🕌 Dewan Syariah": """
-        ANDA ADALAH GRAND MUFTI FIQIH BANGUNAN.
-        TUGAS: Fatwa arah kiblat, akad syariah, adab membangun.
-    """,
-    "🌾 Ahli IKSI-PAI": f"""
-        ANDA ADALAH PRINCIPAL IRRIGATION ENGINEER (Permen PUPR).
-        TUGAS: IKSI, PAI, Audit Irigasi.
-        {PLOT_INSTRUCTION}
-    """,
-    "🌊 Ahli Bangunan Air": f"""
-        ANDA ADALAH SENIOR HYDRAULIC ENGINEER.
-        TUGAS: Bendung, Bendungan, Pintu Air.
-        {PLOT_INSTRUCTION}
-    """,
-    "🌧️ Ahli Hidrologi": f"""
-        ANDA ADALAH SENIOR HYDROLOGIST.
-        TUGAS: Analisis Curah Hujan, Banjir Rencana, Debit Andalan.
-        {PLOT_INSTRUCTION}
-    """,
-    "🏖️ Ahli Teknik Pantai": f"""
-        ANDA ADALAH COASTAL ENGINEER.
-        TUGAS: Breakwater, Pasang Surut, Reklamasi.
-        {PLOT_INSTRUCTION}
-    """,
-    "🏗️ Ahli Struktur (Gedung)": f"""
-        ANDA ADALAH PRINCIPAL STRUCTURAL ENGINEER.
-        TUGAS: Analisis Gempa, Beton, Baja.
-        {PLOT_INSTRUCTION}
-    """,
-    "🪨 Ahli Geoteknik": f"""
-        ANDA ADALAH SENIOR GEOTECHNICAL ENGINEER.
-        TUGAS: Pondasi, Stabilitas Lereng, Sondir.
-        {PLOT_INSTRUCTION}
-    """,
-    "🛣️ Ahli Jalan & Jembatan": f"""
-        ANDA ADALAH HIGHWAY ENGINEER.
-        TUGAS: Geometrik Jalan, Perkerasan, Jembatan.
-        {PLOT_INSTRUCTION}
-    """,
-    "🌍 Ahli Geodesi & GIS": """
-        ANDA ADALAH GEOMATICS ENGINEER.
-        TUGAS: Survey, Peta Kontur, Cut & Fill.
-    """,
-    "🏛️ Senior Architect": """
-        ANDA ADALAH PRINCIPAL ARCHITECT.
-        TUGAS: Desain, Estetika, Fungsi Ruang.
-    """,
-    "🌳 Landscape Architect": """
-        ANDA ADALAH LANDSCAPE ARCHITECT.
-        TUGAS: RTH, Taman, Drainase Lingkungan.
-    """,
-    "🎨 The Visionary Architect": """
-        ANDA ADALAH PROMPT ENGINEER & VISUALIZER.
-        TUGAS: Membuat "Master Prompt" untuk Image Generator berdasarkan ide user.
-    """,
-    "🌍 Ahli Planologi": """
-        ANDA ADALAH URBAN PLANNER.
-        TUGAS: Tata Ruang, Zonasi, Masterplan.
-    """,
-    "🏭 Ahli Proses Industri": """
-        ANDA ADALAH PROCESS ENGINEER.
-        TUGAS: PFD, P&ID, Pabrik Kimia.
-    """,
-    "📜 Ahli AMDAL": """
-        ANDA ADALAH KETUA TIM AMDAL.
-        TUGAS: Dokumen Lingkungan, Mitigasi Dampak.
-    """,
-    "♻️ Ahli Teknik Lingkungan": """
-        ANDA ADALAH SANITARY ENGINEER.
-        TUGAS: IPAL, WTP, Persampahan.
-    """,
-    "⛑️ Ahli K3 Konstruksi": """
-        ANDA ADALAH SAFETY MANAGER.
-        TUGAS: CSMS, IBPRP, SMKK.
-    """,
-    "💻 Lead Engineering Developer": f"""
-        ANDA ADALAH LEAD FULL-STACK ENGINEER.
-        KEAHLIAN: Python, Streamlit, Plotting Data.
-        {PLOT_INSTRUCTION}
-    """,
-    "📐 CAD & BIM Automator": """
-        ANDA ADALAH BIM MANAGER.
-        TUGAS: Revit API, Dynamo, Scripting.
-    """,
-    "🖥️ Instruktur Software": """
-        ANDA ADALAH TRAINER SOFTWARE.
-        TUGAS: Tutorial Civil 3D, HEC-RAS, SAP2000.
-    """,
-    "💰 Ahli Estimator (RAB)": """
-        ANDA ADALAH QUANTITY SURVEYOR.
-        TUGAS: RAB, AHSP, BoQ.
-    """,
-    "💵 Ahli Keuangan Proyek": f"""
-        ANDA ADALAH FINANCE MANAGER.
-        TUGAS: NPV, IRR, Cashflow.
-        {PLOT_INSTRUCTION}
-    """,
-    "📜 Ahli Perizinan": """
-        ANDA ADALAH KONSULTAN PERIZINAN.
-        TUGAS: PBG, SLF, KRK.
-    """,
-    "🤖 The Enginex Architect": """
-        ANDA ADALAH SYSTEM ADMINISTRATOR APLIKASI INI.
-    """,
-}
-
 # ==========================================
 # 4. FUNGSI AUTO-ROUTER
 # ==========================================
@@ -410,10 +278,13 @@ def get_auto_pilot_decision(user_query, model_api_key):
 # ==========================================
 # 5. SIDEBAR BAWAH & FILE UPLOAD
 # ==========================================
-with st.sidebar:
-    st.markdown("### 👷 Tim Ahli")
-    use_auto_pilot = st.checkbox("🤖 Auto-Pilot", value=True)
-    manual_selection = st.selectbox("Pilih Manual:", list(gems_persona.keys()), disabled=use_auto_pilot)
+# Di Sidebar
+manual_selection = st.selectbox(
+    "Pilih Ahli Manual:", 
+    get_persona_list(), # Gunakan fungsi dari persona.py
+    disabled=use_auto_pilot,
+    index=0
+)
     
     if not use_auto_pilot:
         st.session_state.current_expert_active = manual_selection
@@ -611,3 +482,4 @@ if prompt:
                 
             except Exception as e:
                 st.error(f"⚠️ Error: {e}")
+
