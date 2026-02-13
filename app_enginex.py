@@ -286,9 +286,7 @@ manual_selection = st.selectbox(
     index=0
 )
     
-    if not use_auto_pilot:
-        st.session_state.current_expert_active = manual_selection
-    
+      
     st.markdown("---")
     st.markdown("### 📂 Upload Data")
     uploaded_files = st.file_uploader(
@@ -482,4 +480,5 @@ if prompt:
                 
             except Exception as e:
                 st.error(f"⚠️ Error: {e}")
+
 
