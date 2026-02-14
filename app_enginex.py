@@ -9,551 +9,507 @@ from PIL import Image
 import PyPDF2
 import io
 import docx
+from docx.shared import Inches, Pt, Cm
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.oxml.ns import qn
 import zipfile
 from pptx import Presentation
 import re
 import time
 
 # ==========================================
-# 0. CEK KETERSEDIAAN MODUL PENDUKUNG
+# 0. MODUL PENDUKUNG & BACKEND
 # ==========================================
+# Pastikan file backend_enginex.py dan persona.py ada di folder yang sama
 try:
     from backend_enginex import EnginexBackend
     from persona import gems_persona, get_persona_list, get_system_instruction
-    from export_enginex import EnginexExporter
     from streamlit_folium import st_folium
+    import folium
 except ImportError as e:
     st.error(f"❌ CRITICAL ERROR: File modul pendukung tidak ditemukan! \nDetail: {e}")
-    st.warning("Pastikan file: 'backend_enginex.py', 'persona.py', dan 'export_enginex.py' ada di folder yang sama.")
+    st.warning("Pastikan file: 'backend_enginex.py' dan 'persona.py' sudah diupload.")
     st.stop()
 
 # ==========================================
-# 1. KONFIGURASI HALAMAN & CSS PRO
+# 1. ADVANCED REPORT GENERATOR (PU-PR STANDARD)
+# ==========================================
+class ProReportGenerator:
+    """
+    Kelas khusus untuk menghasilkan laporan Word Standar PU-PR
+    yang menggabungkan Teks, Tabel, dan Grafik secara rapi.
+    """
+    @staticmethod
+    def create_full_report(project_name, expert_name, text_content, visual_assets):
+        """
+        visual_assets: list of dict {'type': 'plot'/'image', 'data': BytesIO/ImageObject, 'caption': str}
+        """
+        doc = docx.Document()
+        
+        # --- 1. SETUP HALAMAN (A4, Margin Standar Dinas) ---
+        section = doc.sections[0]
+        section.page_height = Cm(29.7)
+        section.page_width = Cm(21.0)
+        section.left_margin = Cm(2.5)
+        section.right_margin = Cm(2.5)
+        section.top_margin = Cm(2.5)
+        section.bottom_margin = Cm(2.5)
+
+        # --- 2. STYLE FONT (Arial/Times New Roman 11pt) ---
+        style = doc.styles['Normal']
+        font = style.font
+        font.name = 'Arial'
+        font.size = Pt(11)
+
+        # --- 3. HEADER KOP SURAT (SIMULASI) ---
+        header = section.header
+        htable = header.add_table(1, 2, width=Inches(6))
+        htable.autofit = False
+        htable.columns[0].width = Inches(1.5)
+        htable.columns[1].width = Inches(4.5)
+        
+        # Logo/Nama Perusahaan
+        cell_logo = htable.cell(0, 0)
+        cell_logo.text = "ENGINEX\nCONSULTANT"
+        
+        # Info Proyek
+        cell_info = htable.cell(0, 1)
+        p_head = cell_info.paragraphs[0]
+        p_head.text = f"PROYEK: {project_name}\nDOKUMEN: LAPORAN ANALISIS TEKNIS"
+        p_head.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+
+        # --- 4. JUDUL LAPORAN ---
+        doc.add_paragraph("\n")
+        title = doc.add_heading(f"LAPORAN ANALISIS: {project_name.upper()}", 0)
+        title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        
+        sub = doc.add_paragraph(f"Disusun Oleh Ahli: {expert_name}")
+        sub.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        sub.runs[0].italic = True
+        doc.add_paragraph("\n")
+
+        # --- 5. PARSING KONTEN TEKS ---
+        # Membersihkan markdown sederhana menjadi format Word
+        lines = text_content.split('\n')
+        for line in lines:
+            line = line.strip()
+            if not line: continue
+            
+            if line.startswith('### '):
+                doc.add_heading(line.replace('### ', ''), level=3)
+            elif line.startswith('## '):
+                doc.add_heading(line.replace('## ', ''), level=2)
+            elif line.startswith('# '):
+                doc.add_heading(line.replace('# ', ''), level=1)
+            elif line.startswith('- ') or line.startswith('* '):
+                p = doc.add_paragraph(line[2:], style='List Bullet')
+            elif line.startswith('1. '):
+                p = doc.add_paragraph(line, style='List Number')
+            else:
+                # Cek jika ini tabel markdown
+                if "|" in line and "---" not in line:
+                    # (Fitur tabel sederhana bisa ditambahkan jika perlu, 
+                    # tapi untuk stabilitas kita taruh sebagai teks monospace dulu atau skip)
+                    p = doc.add_paragraph(line)
+                elif "---" in line:
+                    continue
+                else:
+                    p = doc.add_paragraph(line)
+                    p.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+
+        # --- 6. MENYISIPKAN LAMPIRAN VISUAL (GRAFIK & GAMBAR) ---
+        if visual_assets:
+            doc.add_page_break()
+            doc.add_heading("LAMPIRAN A: DATA VISUAL & GRAFIK", level=1)
+            doc.add_paragraph("Berikut adalah hasil analisis grafis dan visualisasi pendukung:")
+            
+            for i, asset in enumerate(visual_assets):
+                try:
+                    # Judul Gambar
+                    doc.add_heading(f"Gambar A.{i+1}: {asset['caption']}", level=3)
+                    
+                    # Proses Gambar
+                    img_data = asset['data']
+                    
+                    if asset['type'] == 'plot':
+                        # Plot sudah dalam BytesIO
+                        img_data.seek(0)
+                        doc.add_picture(img_data, width=Inches(6))
+                        
+                    elif asset['type'] == 'image':
+                        # Konversi PIL Image ke BytesIO
+                        img_byte_arr = io.BytesIO()
+                        img_data.save(img_byte_arr, format='PNG')
+                        img_byte_arr.seek(0)
+                        doc.add_picture(img_byte_arr, width=Inches(6))
+                    
+                    last_p = doc.paragraphs[-1] 
+                    last_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                    doc.add_paragraph("\n") # Spasi antar gambar
+                    
+                except Exception as e:
+                    doc.add_paragraph(f"[Gagal memuat gambar: {str(e)}]")
+
+        # --- 7. FOOTER ---
+        section = doc.sections[0]
+        footer = section.footer
+        p_foot = footer.paragraphs[0]
+        p_foot.text = "Dokumen ini digenerate otomatis oleh Sistem Cerdas ENGINEX Ultimate."
+        p_foot.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        
+        # Save to buffer
+        buffer = io.BytesIO()
+        doc.save(buffer)
+        buffer.seek(0)
+        return buffer
+
+# ==========================================
+# 2. KONFIGURASI HALAMAN
 # ==========================================
 st.set_page_config(
-    page_title="ENGINEX Ultimate: Future AI Consultant",
+    page_title="ENGINEX Ultimate: Pro Consultant",
     page_icon="🏗️",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# CSS Custom "Gagah" & Professional
 st.markdown("""
 <style>
-    /* Header Utama */
     .main-header {
-        font-size: 2.5rem;
+        font-size: 2.2rem;
         font-weight: 800;
-        color: #0F172A;
-        margin-bottom: 0.5rem;
-        border-bottom: 4px solid #3B82F6;
+        color: #1E293B;
+        border-bottom: 4px solid #2563EB;
         padding-bottom: 10px;
+        margin-bottom: 20px;
     }
-    
-    /* Sidebar Area */
-    [data-testid="stSidebar"] {
-        background-color: #F8FAFC;
-        border-right: 1px solid #E2E8F0;
-    }
-    
-    /* Tombol Download di Sidebar */
     .stDownloadButton button {
         width: 100%;
-        background-color: #ffffff;
+        background-color: #F1F5F9;
         color: #0F172A;
         border: 1px solid #CBD5E1;
         font-weight: 600;
-        border-radius: 6px;
-        margin-bottom: 8px;
         text-align: left;
         padding-left: 15px;
-        transition: all 0.2s;
     }
     .stDownloadButton button:hover {
-        background-color: #EFF6FF;
-        border-color: #3B82F6;
+        background-color: #DBEAFE;
+        border-color: #2563EB;
         color: #1D4ED8;
-        transform: translateX(3px);
     }
-    
-    /* Auto Pilot Notification */
-    .auto-pilot-box {
-        background-color: #ECFDF5;
-        border-left: 5px solid #10B981;
-        padding: 15px;
-        border-radius: 5px;
-        color: #064E3B;
-        font-weight: bold;
-        margin-bottom: 15px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-    }
-    
-    /* Plot Container */
-    .plot-container {
+    .plot-box {
         border: 1px solid #E2E8F0;
-        border-radius: 8px;
         padding: 15px;
+        border-radius: 8px;
         background: white;
-        margin-top: 15px;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        margin-top: 10px;
+        box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
     }
 </style>
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. INISIALISASI SESSION STATE
+# 3. SESSION STATE & DATABASE
 # ==========================================
 if 'processed_files' not in st.session_state:
     st.session_state.processed_files = set()
-
 if 'current_expert_active' not in st.session_state:
     st.session_state.current_expert_active = "👑 The GEMS Grandmaster"
-
 if 'backend' not in st.session_state:
     st.session_state.backend = EnginexBackend()
 
-# State untuk menyimpan konten analisis terakhir (untuk tombol download sidebar)
-if 'last_analysis_content' not in st.session_state:
-    st.session_state.last_analysis_content = ""
+# --- STATE KHUSUS VISUALISASI ---
+# Ini untuk menyimpan grafik/gambar agar bisa didownload di sidebar
+if 'generated_visuals' not in st.session_state:
+    st.session_state.generated_visuals = [] # List of {'type':, 'data':, 'caption':}
+if 'last_analysis_text' not in st.session_state:
+    st.session_state.last_analysis_text = ""
 
 db = st.session_state.backend
 
 # ==========================================
-# 3. FUNGSI UTILITAS (HELPER FUNCTIONS)
+# 4. FUNGSI UTILITAS (HELPER)
 # ==========================================
-
 def execute_generated_code(code_str):
     """
-    Safe Sandbox: Eksekusi kode Python (Matplotlib) dari AI.
+    Eksekusi kode Python (Matplotlib) dan SIMPAN hasilnya ke memory
+    agar bisa dimasukkan ke laporan Word.
     """
     try:
-        # Definisi variabel lokal yang aman
-        local_vars = {
-            "pd": pd,
-            "np": np,
-            "plt": plt,
-            "st": st
-        }
-        
-        # Bersihkan canvas plot sebelumnya
-        plt.clf()
+        local_vars = {"pd": pd, "np": np, "plt": plt, "st": st}
+        plt.clf() # Bersihkan plot lama
         
         # Eksekusi
         exec(code_str, {}, local_vars)
+        
+        # Tangkap Figur
+        fig = plt.gcf()
+        
+        # Simpan ke Buffer untuk Report
+        buf = io.BytesIO()
+        fig.savefig(buf, format='png', dpi=150, bbox_inches='tight')
+        buf.seek(0)
+        
+        # Simpan ke Session State Visuals
+        st.session_state.generated_visuals.append({
+            'type': 'plot',
+            'data': buf,
+            'caption': "Grafik Analisis Teknis"
+        })
+        
         return True
     except Exception as e:
         st.error(f"⚠️ Gagal Render Grafik: {str(e)}")
         return False
 
-def extract_dataframe_from_markdown(text):
-    """
-    Extract tabel Markdown menjadi Pandas DataFrame untuk export Excel.
-    """
-    try:
-        lines = text.split('\n')
-        data = []
-        headers = []
-        
-        for line in lines:
-            line = line.strip()
-            # Pola tabel markdown: | col1 | col2 |
-            if line.startswith('|') and line.endswith('|'):
-                # Skip separator line (e.g. |---|---|)
-                if '---' in line:
-                    continue
-                
-                cells = [c.strip() for c in line.split('|')[1:-1]]
-                
-                if not headers:
-                    headers = cells
-                else:
-                    # Pastikan jumlah kolom sama dengan header
-                    if len(cells) == len(headers):
-                        data.append(cells)
-                    
-        if headers and data:
-            return pd.DataFrame(data, columns=headers)
-        return None
-    except:
-        return None
-
 def process_uploaded_file(uploaded_file):
-    """
-    Parser File Universal: Membaca konten berdasarkan ekstensi.
-    """
+    """Membaca berbagai format file."""
     if uploaded_file is None: return None, None
-    
     file_type = uploaded_file.name.split('.')[-1].lower()
     
     try:
-        # --- GAMBAR ---
         if file_type in ['png', 'jpg', 'jpeg']:
-            return "image", Image.open(uploaded_file)
-            
-        # --- PDF ---
+            img = Image.open(uploaded_file)
+            return "image", img
         elif file_type == 'pdf':
             pdf_reader = PyPDF2.PdfReader(uploaded_file)
             text = ""
-            for page in pdf_reader.pages:
-                extracted = page.extract_text()
-                if extracted: text += extracted + "\n"
+            for page in pdf_reader.pages: text += page.extract_text() + "\n"
             return "text", text
-            
-        # --- WORD (DOCX) ---
         elif file_type == 'docx':
             doc = docx.Document(uploaded_file)
             text = "\n".join([para.text for para in doc.paragraphs])
             return "text", text
-            
-        # --- EXCEL ---
         elif file_type in ['xlsx', 'xls']:
             df = pd.read_excel(uploaded_file)
-            # Preview 50 baris pertama
-            return "text", f"[DATA EXCEL IMPORT]\n{df.head(50).to_string()}"
-            
-        # --- POWERPOINT ---
-        elif file_type == 'pptx':
-            prs = Presentation(uploaded_file)
-            text = []
-            for slide in prs.slides:
-                for shape in slide.shapes:
-                    if hasattr(shape, "text"):
-                        text.append(shape.text)
-            return "text", "\n".join(text)
-            
-        # --- PYTHON CODE ---
+            return "text", f"[PREVIEW EXCEL]\n{df.head(50).to_string()}"
         elif file_type == 'py':
             return "text", uploaded_file.getvalue().decode("utf-8")
-            
-        # --- GEOSPASIAL (GEOJSON/KML/GPX) ---
         elif file_type in ['geojson', 'kml', 'gpx']:
             return "geo", uploaded_file.getvalue().decode("utf-8")
-            
-        # --- KMZ (Zipped KML) ---
-        elif file_type == 'kmz':
-            with zipfile.ZipFile(uploaded_file, "r") as z:
-                kml_list = [n for n in z.namelist() if n.endswith(".kml")]
-                if kml_list:
-                    with z.open(kml_list[0]) as f:
-                        return "geo", f.read().decode("utf-8")
-                else:
-                    return "error", "Tidak ditemukan file KML dalam KMZ."
         else:
-            return "error", "Format file belum didukung."
-            
+            return "error", "Format tidak didukung."
     except Exception as e:
-        return "error", f"Error membaca file: {str(e)}"
+        return "error", str(e)
 
 # ==========================================
-# 4. SIDEBAR SETTINGS (FUTURE MODEL LIST)
+# 5. SIDEBAR SETTINGS & DOWNLOAD CENTER
 # ==========================================
 with st.sidebar:
     st.title("🏗️ ENGINEX ULTIMATE")
-    st.caption("v12.0 | Future Ready Core")
+    st.caption("v13.0 | Integrated Visual Report")
     st.markdown("---")
     
-    # --- A. API KEY ---
-    api_key_input = st.text_input("🔑 Google API Key:", type="password", help="Wajib diisi.")
-    
-    # Prioritas: Input User > Secrets
-    if api_key_input:
-        clean_api_key = api_key_input.strip()
-    else:
-        clean_api_key = st.secrets.get("GOOGLE_API_KEY", "")
-    
-    if not clean_api_key:
-        st.warning("⚠️ Masukkan API Key.")
-        st.stop()
-        
-    try:
-        genai.configure(api_key=clean_api_key)
-    except Exception as e:
-        st.error(f"API Error: {e}")
-        st.stop()
+    # --- API KEY ---
+    api_key_input = st.text_input("🔑 Google API Key:", type="password")
+    clean_key = api_key_input.strip() if api_key_input else st.secrets.get("GOOGLE_API_KEY", "")
+    if not clean_key: st.warning("Masukkan API Key."); st.stop()
+    try: genai.configure(api_key=clean_key)
+    except: st.error("API Key Invalid."); st.stop()
 
-    # --- B. MODEL SELECTION (FUTURE LIST) ---
-    st.markdown("### 🧠 Quantum AI Engine")
-    
-    # List Sesuai Permintaan User (Era 2026)
-    future_model_list = [
-        "models/gemini-2.5-flash-lite",
-        "models/gemini-2.5-flash-image",
-        "models/gemini-2.5-flash-preview-09-2025",
-        "models/gemini-2.5-flash-lite-preview-09-2025",
-        "models/gemini-3-pro-preview",
-        "models/gemini-3-flash-preview",
-        "models/gemini-3-pro-image-preview",
-        "models/gemini-robotics-er-1.5-preview",
-        "models/gemini-2.5-comput",
-        # Fallback Stable Models
-        "models/gemini-1.5-pro",
-        "models/gemini-1.5-flash"
+    # --- MODEL SELECTOR ---
+    future_models = [
+        "models/gemini-2.5-flash-lite", "models/gemini-2.5-flash-image",
+        "models/gemini-1.5-pro", "models/gemini-1.5-flash"
     ]
+    selected_model = st.selectbox("🧠 Model AI:", future_models, index=2)
     
-    selected_model_name = st.selectbox(
-        "Pilih Versi Model:", 
-        future_model_list,
-        index=0,
-        help="Pilih engine generative terbaru."
-    )
-    
-    # Indikator Visual Kecanggihan
-    if "3-" in selected_model_name:
-        st.success(f"🚀 **GEN 3 ACTIVE:** {selected_model_name}")
-    elif "2.5" in selected_model_name:
-        st.info(f"⚡ **GEN 2.5 ACTIVE:** {selected_model_name}")
-    elif "robotics" in selected_model_name:
-        st.warning(f"🤖 **ROBOTICS MODE:** {selected_model_name}")
-    else:
-        st.caption(f"Standard Core: {selected_model_name}")
-
-    # --- C. PROJECT MANAGEMENT ---
-    with st.expander("📁 Manajemen Proyek", expanded=False):
-        existing_projects = db.daftar_proyek()
-        mode_proyek = st.radio("Opsi:", ["Buka Proyek Lama", "Buat Proyek Baru"])
-        
-        if mode_proyek == "Buat Proyek Baru":
-            nama_proyek = st.text_input("Nama Proyek:", "DED Bendungan 2026")
-        else:
-            if existing_projects:
-                nama_proyek = st.selectbox("Pilih Proyek:", existing_projects)
-            else:
-                st.info("Belum ada proyek.")
-                nama_proyek = "Proyek Tanpa Nama"
+    # --- PROJECT MANAGER ---
+    with st.expander("📁 Proyek & Ahli", expanded=False):
+        projects = db.daftar_proyek()
+        mode = st.radio("Mode:", ["Buka Lama", "Buat Baru"])
+        nama_proyek = st.text_input("Nama Proyek:", "DED Bendungan 2026") if mode == "Buat Baru" else st.selectbox("Pilih:", projects if projects else ["Baru"])
         
         st.markdown("---")
-        use_auto_pilot = st.checkbox("🤖 Mode Auto-Pilot", value=True)
-        manual_expert = st.selectbox(
-            "Ahli Manual:", 
-            get_persona_list(), 
-            disabled=use_auto_pilot
-        )
+        auto_pilot = st.checkbox("🤖 Auto-Pilot", value=True)
+        manual_expert = st.selectbox("Ahli:", get_persona_list(), disabled=auto_pilot)
 
-    # --- D. FILE UPLOAD ---
+    # --- UPLOAD ---
     st.markdown("### 📎 Upload Data")
-    uploaded_files = st.file_uploader(
-        "Upload Dokumen/Gambar/Peta:", 
-        accept_multiple_files=True,
-        type=None
-    )
+    uploaded_files = st.file_uploader("", accept_multiple_files=True)
     
     if st.button("🧹 Reset Sesi"):
         db.clear_chat(nama_proyek, st.session_state.current_expert_active)
-        st.session_state.last_analysis_content = ""
+        st.session_state.generated_visuals = [] # Clear visuals
+        st.session_state.last_analysis_text = ""
         st.rerun()
 
     st.markdown("---")
-
+    
     # ==========================================
-    # 5. SIDEBAR DOWNLOAD CENTER
+    # 🌟 NEW: SIDEBAR DOWNLOAD CENTER
     # ==========================================
     st.header("📥 Download Center")
-    export_placeholder = st.empty()
+    st.caption("Unduh laporan lengkap dengan grafik.")
     
-    def render_export_buttons(text_content, project_name):
-        """Merender tombol download di sidebar berdasarkan output terakhir."""
-        if not text_content:
-            export_placeholder.info("Belum ada analisis.")
-            return
-
-        with export_placeholder.container():
-            # 1. Word
-            docx_data = EnginexExporter.create_pupr_word(text_content, project_name)
-            st.download_button("📄 Laporan (.docx)", docx_data, f"{project_name}_Report.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+    dl_container = st.container()
+    
+    if st.session_state.last_analysis_text:
+        with dl_container:
+            # 1. GENERATE WORD REPORT (TEKS + GAMBAR)
+            docx_buffer = ProReportGenerator.create_full_report(
+                nama_proyek, 
+                st.session_state.current_expert_active, 
+                st.session_state.last_analysis_text,
+                st.session_state.generated_visuals
+            )
             
-            # 2. Excel (Jika ada tabel)
-            df_table = extract_dataframe_from_markdown(text_content)
-            if df_table is not None:
-                xlsx_data = EnginexExporter.create_pupr_excel(df_table)
-                st.download_button("📊 Tabel Data (.xlsx)", xlsx_data, f"{project_name}_Data.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            st.download_button(
+                label="📄 Laporan Resmi (.docx)\n(Teks + Grafik Terlampir)", 
+                data=docx_buffer, 
+                file_name=f"{nama_proyek}_Full_Report.docx", 
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            )
+            
+            # 2. DOWNLOAD GRAFIK/GAMBAR SAJA (ZIP)
+            if st.session_state.generated_visuals:
+                zip_buffer = io.BytesIO()
+                with zipfile.ZipFile(zip_buffer, "w") as zf:
+                    for i, vis in enumerate(st.session_state.generated_visuals):
+                        ext = "png"
+                        data = vis['data']
+                        data.seek(0)
+                        zf.writestr(f"Gambar_{i+1}.{ext}", data.read())
                 
-                # 3. Civil 3D (Jika ada koordinat)
-                cols = [c.lower() for c in df_table.columns]
-                if any('x' in c for c in cols) and any('y' in c for c in cols):
-                    csv_data = EnginexExporter.export_to_civil3d_csv(df_table)
-                    st.download_button("🏗️ Civil 3D (.csv)", csv_data, f"{project_name}_Points.csv", "text/csv")
-            
-            # 4. PPT
-            ppt_data = EnginexExporter.create_pupr_pptx(text_content, project_name)
-            st.download_button("📢 Slide Presentasi (.pptx)", ppt_data, f"{project_name}_Slide.pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation")
+                zip_buffer.seek(0)
+                st.download_button(
+                    label="🖼️ Galeri Visual (.zip)\n(Hanya Gambar & Grafik)", 
+                    data=zip_buffer, 
+                    file_name=f"{nama_proyek}_Visuals.zip", 
+                    mime="application/zip"
+                )
+            else:
+                st.info("ℹ️ Belum ada grafik/gambar yang digenerate.")
+    else:
+        st.info("Belum ada analisis untuk didownload.")
 
 # ==========================================
-# 6. LOGIKA UTAMA CHAT (MAIN APP)
+# 6. MAIN CHAT LOGIC
 # ==========================================
-
-# Header
 st.markdown(f'<div class="main-header">{nama_proyek}</div>', unsafe_allow_html=True)
 
-# Tentukan Expert
-if use_auto_pilot:
+# Ahli Aktif
+if auto_pilot:
     active_expert = st.session_state.current_expert_active
 else:
     active_expert = manual_expert
     st.session_state.current_expert_active = manual_expert
 
-st.caption(f"Status: **Connected** | Ahli Aktif: **{active_expert}**")
+st.caption(f"Status: **Online** | Ahli: **{active_expert}**")
 
-# --- LOAD HISTORY ---
-history_data = db.get_chat_history(nama_proyek, active_expert)
-
-# Update Export State dari history terakhir
-if history_data:
-    last_assistant_msg = None
-    for msg in reversed(history_data):
-        if msg['role'] == 'assistant':
-            last_assistant_msg = msg['content']
-            break
-    if last_assistant_msg:
-        st.session_state.last_analysis_content = last_assistant_msg
-
-# Render Chat History
-for chat in history_data:
+# --- HISTORY ---
+history = db.get_chat_history(nama_proyek, active_expert)
+for chat in history:
     with st.chat_message(chat['role']):
         st.markdown(chat['content'])
-        # Render ulang grafik jika ada kode di history
+        # Re-render plot if exists in history (Visual only, not saving to report again to avoid dupes)
         if chat['role'] == 'assistant' and "```python" in chat['content']:
-            match = re.search(r"```python(.*?)```", chat['content'], re.DOTALL)
-            if match and "plt." in match.group(1):
-                with st.expander("📊 Lihat Grafik"):
-                    execute_generated_code(match.group(1))
-                    st.pyplot(plt.gcf())
+            code_match = re.search(r"```python(.*?)```", chat['content'], re.DOTALL)
+            if code_match and "plt." in code_match.group(1):
+                with st.expander("📊 Lihat Grafik (Arsip)"):
+                    try:
+                        exec(code_match.group(1), {"pd":pd, "np":np, "plt":plt, "st":st})
+                        st.pyplot(plt.gcf())
+                        plt.clf()
+                    except: pass
 
-# Tampilkan tombol export di awal load
-render_export_buttons(st.session_state.last_analysis_content, nama_proyek)
-
-# --- USER INPUT ---
+# --- INPUT ---
 user_input = st.chat_input(f"Konsultasi dengan {active_expert}...")
 
 if user_input:
-    # 1. ROUTING AUTO-PILOT
+    # 1. Routing
     target_expert = active_expert
-    if use_auto_pilot:
+    if auto_pilot:
         try:
-            # Gunakan model Flash stabil untuk routing cepat
             router = genai.GenerativeModel("models/gemini-1.5-flash")
-            prompt = f"""
-            Tugas: Router Ahli Proyek.
-            Pertanyaan: "{user_input}"
-            Daftar Ahli: {list(gems_persona.keys())}
-            Output: HANYA NAMA AHLI.
-            """
-            resp = router.generate_content(prompt)
-            suggestion = resp.text.strip()
-            if suggestion in gems_persona:
-                target_expert = suggestion
+            resp = router.generate_content(f"Pilih SATU ahli dari {list(gems_persona.keys())} untuk: '{user_input}'. Output Nama Saja.")
+            if resp.text.strip() in gems_persona:
+                target_expert = resp.text.strip()
                 st.session_state.current_expert_active = target_expert
-        except:
-            pass # Fallback keep current expert
+        except: pass
     
     if target_expert != active_expert:
-        st.markdown(f'<div class="auto-pilot-box">🤖 Auto-Pilot mengalihkan ke: {target_expert}</div>', unsafe_allow_html=True)
+        st.info(f"🤖 Auto-Pilot: Mengalihkan ke {target_expert}")
         active_expert = target_expert
 
-    # 2. SIMPAN CHAT USER
+    # 2. User Chat
     db.simpan_chat(nama_proyek, active_expert, "user", user_input)
-    with st.chat_message("user"):
-        st.markdown(user_input)
+    with st.chat_message("user"): st.markdown(user_input)
 
-    # 3. PERSIAPAN CONTENT
+    # 3. Content Prep
     payload = [user_input]
+    # Reset visuals for NEW chat only (optional strategy, here we keep appending or clear on demand)
+    # st.session_state.generated_visuals = [] # Uncomment jika ingin reset gambar tiap chat baru
+    
     if uploaded_files:
         for f in uploaded_files:
             if f.name not in st.session_state.processed_files:
                 ftype, fcontent = process_uploaded_file(f)
-                
                 if ftype == "image":
                     with st.chat_message("user"): st.image(f, width=250)
+                    # Simpan gambar upload user ke report juga
+                    img_byte_arr = io.BytesIO()
+                    fcontent.save(img_byte_arr, format='PNG')
+                    st.session_state.generated_visuals.append({'type':'image', 'data':fcontent, 'caption':f"Upload User: {f.name}"})
                     payload.append(fcontent)
-                elif ftype == "geo":
-                    with st.chat_message("user"):
-                        st.caption(f"🌍 Peta: {f.name}")
-                        m = EnginexExporter.render_geospatial_map(fcontent, f.name.split('.')[-1])
-                        if m: st_folium(m, height=300)
-                    payload.append(f"\n[DATA GEO]: {fcontent[:3000]}...")
                 elif ftype == "text":
                     payload.append(f"\n[DOKUMEN {f.name}]: {fcontent}")
-                
                 st.session_state.processed_files.add(f.name)
 
-    # 4. GENERATE AI (SMART FALLBACK SYSTEM)
+    # 4. Generate AI
     with st.chat_message("assistant"):
-        with st.spinner(f"{active_expert} sedang menganalisis..."):
+        with st.spinner("Sedang menganalisis & merancang..."):
             try:
-                # Ambil Instruksi
+                # Instruksi Plotting Wajib
                 sys_instr = get_system_instruction(active_expert)
-                # Tambah instruksi plot jika Engineer
                 if "Code" not in active_expert and "Visionary" not in active_expert:
                     sys_instr += "\n[VISUALISASI]: Jika butuh grafik, buat kode Python (matplotlib). Akhiri dgn 'st.pyplot(plt.gcf())'."
 
-                # --- SMART MODEL LOADING ---
-                # Mencoba memanggil model yang dipilih user.
-                # Jika nama model belum ada di API (karena belum rilis publik),
-                # otomatis fallback ke 'gemini-1.5-pro' agar tidak error.
-                
-                active_model = None
-                try:
-                    # Coba inisialisasi model pilihan user
-                    temp_model = genai.GenerativeModel(selected_model_name, system_instruction=sys_instr)
-                    # Test dummy call untuk memastikan model valid
-                    # (Opsional: kita langsung pakai saja, tangkap error saat stream)
-                    active_model = temp_model
-                except:
-                    # Jika gagal init, fallback
-                    active_model = genai.GenerativeModel("models/gemini-1.5-pro", system_instruction=sys_instr)
+                # Fallback Model Logic
+                try: model = genai.GenerativeModel(selected_model, system_instruction=sys_instr)
+                except: model = genai.GenerativeModel("models/gemini-1.5-pro", system_instruction=sys_instr)
 
-                # Build Context History (5 pesan terakhir)
+                # History
                 hist_objs = []
-                chat_hist = db.get_chat_history(nama_proyek, active_expert)[-5:]
-                for h in chat_hist:
+                for h in db.get_chat_history(nama_proyek, active_expert)[-5:]:
                     if h['content'] != user_input:
-                        role = "user" if h['role']=="user" else "model"
-                        hist_objs.append({"role": role, "parts": [h['content']]})
-
-                # Start Chat
-                chat_session = active_model.start_chat(history=hist_objs)
+                        hist_objs.append({"role": "user" if h['role']=="user" else "model", "parts": [h['content']]})
                 
-                # Streaming Response
-                # Kita bungkus send_message dalam try-except lagi untuk menangani "Model not found" saat request
+                chat = model.start_chat(history=hist_objs)
+                
+                # Handling Stream & Fallback
                 full_resp = ""
                 box = st.empty()
-                
                 try:
-                    stream = chat_session.send_message(payload, stream=True)
+                    stream = chat.send_message(payload, stream=True)
                     for chunk in stream:
                         if chunk.text:
                             full_resp += chunk.text
                             box.markdown(full_resp + "▌")
-                except Exception as api_err:
-                    # Jika error API (misal model 3.0 belum ready), switch ke 1.5 Pro on-the-fly
-                    # st.warning(f"⚠️ Model {selected_model_name} sibuk/belum tersedia. Menggunakan Core Cadangan...")
-                    fallback_model = genai.GenerativeModel("models/gemini-1.5-pro", system_instruction=sys_instr)
-                    fallback_chat = fallback_model.start_chat(history=hist_objs)
-                    resp_fallback = fallback_chat.send_message(payload) # Non-stream untuk fallback
-                    full_resp = resp_fallback.text
+                except:
+                    # Retry non-stream if flash model fails
+                    fallback = genai.GenerativeModel("models/gemini-1.5-pro", system_instruction=sys_instr)
+                    full_resp = fallback.start_chat(history=hist_objs).send_message(payload).text
                 
-                # Tampilkan Final
                 box.markdown(full_resp)
-                
-                # Simpan DB
                 db.simpan_chat(nama_proyek, active_expert, "assistant", full_resp)
                 
-                # 5. EKSEKUSI PLOT
+                # 5. EXECUTE PLOTS & SAVE TO VISUALS
                 codes = re.findall(r"```python(.*?)```", full_resp, re.DOTALL)
                 for c in codes:
                     if "plt." in c:
                         st.markdown("### 📉 Grafik Engineering")
                         with st.container():
-                            execute_generated_code(c)
-                            st.pyplot(plt.gcf())
+                            # Fungsi ini sudah otomatis menyimpan ke st.session_state.generated_visuals
+                            success = execute_generated_code(c)
+                            if success:
+                                st.pyplot(plt.gcf())
+                                # Jangan lupa clf agar tidak tumpang tindih
+                                plt.clf() 
 
-                # 6. UPDATE SIDEBAR EXPORT
-                st.session_state.last_analysis_content = full_resp
-                render_export_buttons(full_resp, nama_proyek)
+                # 6. UPDATE REPORT STATE
+                st.session_state.last_analysis_text = full_resp
+                st.rerun() # Refresh agar tombol download di sidebar muncul/update
 
             except Exception as e:
-                st.error(f"❌ Terjadi Kesalahan: {str(e)}")
-                st.info("Saran: Refresh halaman atau ganti ke model 'gemini-1.5-pro' jika model eksperimental tidak stabil.")
-
-# Footer
-st.markdown("---")
-st.caption("© 2026 ENGINEX Ultimate System | Powered by Gemini Quantum Engine")
+                st.error(f"Error Sistem: {e}")
