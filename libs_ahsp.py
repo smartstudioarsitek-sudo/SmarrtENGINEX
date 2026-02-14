@@ -2,12 +2,37 @@ import pandas as pd
 
 class AHSP_Engine:
     def __init__(self):
+        # Database Koefisien AHSP (SNI/Permen PUPR)
+        # Diperluas agar AI tidak bingung
         self.koefisien = {
+            # --- BETON ---
+            "beton_k175": {
+                "desc": "Beton K-175 (fc 14.5 MPa)",
+                "bahan": {"Semen (kg)": 326, "Pasir (m3)": 0.52, "Split (m3)": 0.76},
+                "upah": {"Pekerja": 1.65, "Tukang": 0.275, "Mandor": 0.083}
+            },
+            "beton_k225": {
+                "desc": "Beton K-225 (fc 19 MPa)",
+                "bahan": {"Semen (kg)": 371, "Pasir (m3)": 0.498, "Split (m3)": 0.77},
+                "upah": {"Pekerja": 1.65, "Tukang": 0.275, "Mandor": 0.083}
+            },
             "beton_k250": {
-                "desc": "Membuat 1 m3 Beton Mutu f'c=21.7 MPa (K-250)",
+                "desc": "Beton K-250 (fc 21.7 MPa)",
                 "bahan": {"Semen (kg)": 384, "Pasir (m3)": 0.494, "Split (m3)": 0.77},
                 "upah": {"Pekerja": 1.65, "Tukang": 0.275, "Mandor": 0.083}
             },
+            "beton_k300": {
+                "desc": "Beton K-300 (fc 25 MPa)",
+                "bahan": {"Semen (kg)": 413, "Pasir (m3)": 0.48, "Split (m3)": 0.77},
+                "upah": {"Pekerja": 1.65, "Tukang": 0.275, "Mandor": 0.083}
+            },
+            "beton_k350": {
+                "desc": "Beton K-350 (fc 29 MPa)",
+                "bahan": {"Semen (kg)": 448, "Pasir (m3)": 0.47, "Split (m3)": 0.76},
+                "upah": {"Pekerja": 1.65, "Tukang": 0.275, "Mandor": 0.083}
+            },
+
+            # --- BESI ---
             "pembesian_polos": {
                 "desc": "Pembesian 10 kg dengan Besi Polos/Ulir",
                 "bahan": {"Besi Beton (kg)": 10.5, "Kawat Beton (kg)": 0.15},
@@ -18,6 +43,13 @@ class AHSP_Engine:
                 "bahan": {"Kayu Kelas III (m3)": 0.04, "Paku (kg)": 0.4, "Minyak Bekisting (L)": 0.2},
                 "upah": {"Pekerja": 0.66, "Tukang": 0.33, "Mandor": 0.033}
             },
+            "bekisting_kolom": {
+                "desc": "Pemasangan 1 m2 Bekisting Kolom",
+                "bahan": {"Kayu Kelas III (m3)": 0.04, "Paku (kg)": 0.4, "Minyak (L)": 0.2, "Plywood 9mm (lbr)": 0.35},
+                "upah": {"Pekerja": 0.66, "Tukang": 0.33, "Mandor": 0.033}
+            },
+
+            # --- PONDASI ---
             "pasangan_batu_kali": {
                 "desc": "Pasangan Batu Kali 1:4 (Talud)",
                 "bahan": {"Batu Kali (m3)": 1.2, "Semen (kg)": 163, "Pasir (m3)": 0.52},
@@ -28,7 +60,8 @@ class AHSP_Engine:
                 "bahan": {"Beton K300 (m3)": 1.05},
                 "upah": {"Pekerja": 2.0, "Tukang": 0.5, "Mandor": 0.1}
             },
-            # ITEM BARU: ARSITEKTUR
+
+            # --- ARSITEKTUR ---
             "pasangan_bata_merah": {
                 "desc": "Pasangan Dinding Bata Merah 1:4",
                 "bahan": {"Bata Merah (bh)": 70, "Semen (kg)": 11.5, "Pasir (m3)": 0.043},
@@ -62,8 +95,15 @@ class AHSP_Engine:
         }
 
     def hitung_hsp(self, kode_analisa, harga_bahan_dasar, harga_upah_dasar):
-        if kode_analisa not in self.koefisien: return 0
-        data = self.koefisien[kode_analisa]
+        # Fallback Logic: Jika kode tidak ada persis, coba cari yang mirip
+        target_kode = kode_analisa
+        if kode_analisa not in self.koefisien: 
+            # Jika user minta K-275 tapi gak ada, kita kasih K-300 (safety)
+            if "beton" in kode_analisa: target_kode = "beton_k300"
+            elif "bata" in kode_analisa: target_kode = "pasangan_bata_merah"
+            else: return 0 # Nyerah
+            
+        data = self.koefisien[target_kode]
         total_bahan = 0
         total_upah = 0
         
@@ -81,6 +121,9 @@ class AHSP_Engine:
             elif "bata" in key_clean: h_satuan = harga_bahan_dasar.get('bata merah', 0)
             elif "cat" in key_clean: h_satuan = harga_bahan_dasar.get('cat tembok', 0)
             elif "pipa" in key_clean: h_satuan = harga_bahan_dasar.get('pipa pvc', 0)
+            elif "plywood" in key_clean: h_satuan = harga_bahan_dasar.get('plywood', 0)
+            elif "paku" in key_clean: h_satuan = harga_bahan_dasar.get('paku', 0)
+            elif "minyak" in key_clean: h_satuan = harga_bahan_dasar.get('minyak', 0)
             
             total_bahan += koef * h_satuan
             
