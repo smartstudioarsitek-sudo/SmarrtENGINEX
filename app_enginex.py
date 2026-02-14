@@ -13,6 +13,30 @@ import zipfile
 from pptx import Presentation
 import re
 
+# --- IMPORT LIBRARY TEKNIK SIPIL CUSTOM (ENGINEX BRAIN) ---
+# Pastikan file-file libs_*.py ada di satu folder dengan file ini
+import libs_ahsp
+import libs_baja
+import libs_bridge
+import libs_gempa
+import libs_geoteknik
+import libs_optimizer
+import libs_pondasi
+import libs_sni
+
+# Import Library Tambahan (Pake Try-Except biar gak crash kalau belum install modulnya)
+try:
+    import libs_sustainability
+    has_sustainability = True
+except ImportError:
+    has_sustainability = False
+
+try:
+    import libs_bim_importer
+    has_bim = True
+except ImportError:
+    has_bim = False
+
 # --- KONFIGURASI HALAMAN ---
 st.set_page_config(page_title="ENGINEX Ultimate", page_icon="🏗️", layout="wide")
 
@@ -129,23 +153,43 @@ def extract_table_to_excel(text_content):
 
 def execute_generated_code(code_str):
     """
-    [ENGINEERING PLOTTER]
-    Mengeksekusi string kode Python yang dihasilkan AI untuk membuat grafik.
+    [ENGINEERING PLOTTER & CALCULATION ENGINE]
+    Mengeksekusi string kode Python yang dihasilkan AI.
+    Sekarang mendukung library teknik sipil custom.
     """
     try:
-        # Create a dictionary for local variables
+        # KITA MASUKKAN SEMUA LIBS KE DALAM "KOTAK PERKAKAS" (LOCAL VARS)
+        # Agar kode Python dari AI bisa mengenali 'libs_sni', 'libs_ahsp', dll.
         local_vars = {
             "pd": pd,
             "np": np,
             "plt": plt,
-            "st": st
+            "st": st,
+            # DAFTARKAN LIBRARY CUSTOM DI SINI:
+            "libs_ahsp": libs_ahsp,
+            "libs_baja": libs_baja,
+            "libs_bridge": libs_bridge,
+            "libs_gempa": libs_gempa,
+            "libs_geoteknik": libs_geoteknik,
+            "libs_optimizer": libs_optimizer,
+            "libs_pondasi": libs_pondasi,
+            "libs_sni": libs_sni
         }
         
-        # Eksekusi kode dalam lingkungan aman
+        # Tambahkan optional libs jika terinstall
+        if has_sustainability:
+            local_vars["libs_sustainability"] = libs_sustainability
+        if has_bim:
+            local_vars["libs_bim_importer"] = libs_bim_importer
+        
+        # Eksekusi kode dalam lingkungan yang sudah dibekali tools
         exec(code_str, {}, local_vars)
         return True
     except Exception as e:
-        st.error(f"⚠️ Gagal Render Grafik: {e}")
+        st.error(f"⚠️ Gagal Eksekusi Kode: {e}")
+        # Tampilkan detail error biar gampang debug
+        with st.expander("Lihat Kode Error"):
+            st.code(code_str, language='python') 
         return False
 
 # ==========================================
@@ -153,7 +197,7 @@ def execute_generated_code(code_str):
 # ==========================================
 with st.sidebar:
     st.title("🏗️ ENGINEX ULTIMATE")
-    st.caption("v10.1 | Level 2 (Drafter) & Level 3 (Engineer)")
+    st.caption("v11.0 | Integrated Engineering System")
     
     api_key_input = st.text_input("🔑 API Key:", type="password")
     if api_key_input:
@@ -180,6 +224,7 @@ def get_available_models_from_google(api_key_trigger):
         for m in genai.list_models():
             if 'generateContent' in m.supported_generation_methods:
                 model_list.append(m.name)
+        # Urutkan agar yang 'pro' di bawah, 'flash' di atas (default)
         model_list.sort(key=lambda x: 'pro' not in x) 
         return model_list, None
     except Exception as e:
@@ -217,7 +262,7 @@ try:
         st.session_state.backend = EnginexBackend()
     db = st.session_state.backend
 except ImportError as e:
-    st.error(f"⚠️ Error Import File: {e}")
+    st.error(f"⚠️ Error Import File Backend/Persona: {e}")
     st.stop()
 
 # ==========================================
@@ -247,14 +292,14 @@ with st.sidebar:
 # ==========================================
 
 PLOT_INSTRUCTION = """
-[ATURAN PENTING UNTUK VISUALISASI DATA]:
-Jika user meminta grafik/diagram/plot:
+[ATURAN PENTING UNTUK VISUALISASI & PERHITUNGAN]:
+Jika user meminta grafik/diagram/plot atau PERHITUNGAN TEKNIS:
 1. JANGAN HANYA MEMBERIKAN DESKRIPSI.
 2. ANDA WAJIB MENULISKAN KODE PYTHON DI DALAM BLOK KODE (```python).
 3. Gunakan library `matplotlib.pyplot` (sebagai plt) dan `numpy` (sebagai np).
-4. WAJIB: Di akhir kode plotting, gunakan perintah `st.pyplot(plt.gcf())` agar grafik muncul di layar aplikasi Streamlit user.
-5. Jangan gunakan `plt.show()`.
-6. Berikan judul, label sumbu, dan grid agar grafik terlihat profesional teknik sipil.
+4. Gunakan Library Custom yang tersedia (`libs_sni`, `libs_ahsp`, dll) sesuai instruksi di TOOL_DOCS.
+5. WAJIB: Di akhir kode plotting, gunakan perintah `st.pyplot(plt.gcf())` agar grafik muncul.
+6. Untuk menampilkan Dataframe hasil hitungan, gunakan `st.dataframe(df)` atau `st.write(df)`.
 """
 
 # ==========================================
@@ -292,7 +337,7 @@ with st.sidebar:
     
     uploaded_files = st.file_uploader(
         "File:", 
-        type=["png", "jpg", "jpeg", "pdf", "docx", "doc", "xlsx", "xls", "pptx", "zip", "dwg", "kml", "kmz", "geojson", "gpx", "py"], 
+        type=["png", "jpg", "jpeg", "pdf", "docx", "doc", "xlsx", "xls", "pptx", "zip", "dwg", "kml", "kmz", "geojson", "gpx", "py", "ifc"], 
         accept_multiple_files=True
     )
     
@@ -356,6 +401,11 @@ def process_uploaded_file(uploaded_file):
         elif file_type == 'zip':
             with zipfile.ZipFile(uploaded_file, "r") as z:
                 return "text", f"ZIP Content:\n{', '.join(z.namelist())}"
+        elif file_type == 'ifc':
+            # Untuk IFC, kita tidak baca text, tapi simpan path atau bytes
+            # Nanti libs_bim_importer yang handle
+            return "bytes", uploaded_file
+            
     except Exception as e: 
         return "error", str(e)
     return "error", "Format tidak didukung"
@@ -405,6 +455,9 @@ if prompt:
                 elif ftype == "text":
                     with st.chat_message("user"): st.caption(f"📄 Data: {upl_file.name}")
                     content_to_send[0] += f"\n\n--- FILE: {upl_file.name} ---\n{fcontent}\n------\n"
+                elif ftype == "bytes":
+                     with st.chat_message("user"): st.caption(f"💾 Binary: {upl_file.name}")
+                     # Khusus IFC/Binary, logic handle-nya nanti di code python
                 st.session_state.processed_files.add(upl_file.name)
 
     # --- GENERATE AI RESPONSE ---
@@ -419,7 +472,7 @@ if prompt:
                 }
 
                 # ==========================================================
-                # [MODIFIKASI PENTING: LEVEL 2 (TEXT) vs LEVEL 3 (PLOTTING)]
+                # [LOGIKA INSTRUKSI]
                 # ==========================================================
                 
                 # Daftar ahli yang TIDAK BOLEH dikasih senjata coding (Hanya Ngetik)
@@ -431,10 +484,8 @@ if prompt:
                 base_instruction = gems_persona[final_expert_name]
                 
                 if is_text_only:
-                    # MODE PENURUT: Hanya bawa instruksi dasar.
                     full_system_instruction = base_instruction
                 else:
-                    # MODE INSINYUR: Bawa instruksi dasar + instruksi plotting.
                     full_system_instruction = base_instruction + "\n\n" + PLOT_INSTRUCTION
 
                 model = genai.GenerativeModel(
@@ -468,16 +519,17 @@ if prompt:
                 # ==================================================
                 # ENGINEERING PLOTTER EXECUTION
                 # ==================================================
-                # Hanya jalankan plotter jika bukan text-only agent (Double Check)
                 if not is_text_only:
                     code_blocks = re.findall(r"```python(.*?)```", full_response_text, re.DOTALL)
                     for code in code_blocks:
-                        if "plt." in code or "matplotlib" in code:
-                            st.markdown("### 📊 Engineering Plotter Output:")
+                        # Cek apakah kode mengandung modul visualisasi atau hitungan
+                        keywords_trigger = ["plt.", "matplotlib", "libs_", "st.dataframe", "st.write"]
+                        if any(k in code for k in keywords_trigger):
+                            st.markdown("### ⚙️ Engine Output:")
                             with st.container():
                                 success = execute_generated_code(code)
                                 if success:
-                                    st.caption("✅ Grafik berhasil di-render dari kode Python.")
+                                    st.caption("✅ Eksekusi Kode Berhasil.")
                                 plt.clf()
 
                 # ==================================================
